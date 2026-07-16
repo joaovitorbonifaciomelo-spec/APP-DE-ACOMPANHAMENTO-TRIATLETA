@@ -50,8 +50,11 @@ export function TabBar({ state, navigation }: TabBarProps) {
     );
   };
 
+  // no iPhone, sobrepõe parte da área do home indicator (como apps nativos)
+  const bottomPad = Math.max(insets.bottom - 14, 0);
+
   return (
-    <View style={[styles.bar, { paddingBottom: insets.bottom, height: TAB_BAR_HEIGHT + insets.bottom }]}>
+    <View style={[styles.bar, { paddingBottom: bottomPad, height: TAB_BAR_HEIGHT + bottomPad }]}>
       {TABS.slice(0, 2).map(renderTab)}
 
       <View style={styles.plusSlot}>

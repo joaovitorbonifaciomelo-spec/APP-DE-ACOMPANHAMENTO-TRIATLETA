@@ -50,7 +50,7 @@ export function FixedBottomBar({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   useEffect(() => pushCtaOpen(), []);
   return (
-    <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 12 }]}>
+    <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom - 14, 0) + 12 }]}>
       {children}
     </View>
   );
