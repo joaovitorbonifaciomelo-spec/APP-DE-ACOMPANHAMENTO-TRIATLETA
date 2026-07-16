@@ -1,0 +1,6 @@
+# referência de design local (não versionar)
+screenshots/
+
+# SO
+.DS_Store
+Thumbs.db
