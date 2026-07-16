@@ -381,6 +381,12 @@ function fmtWeight(w: number): string {
 }
 
 export async function startWorkout(db: SQLiteDatabase, templateId: number): Promise<number> {
+  // nunca dois treinos ativos (protege contra toque duplo)
+  const existing = await db.getFirstAsync<{ id: number }>(
+    "SELECT id FROM strength_workouts WHERE status = 'active' ORDER BY id DESC LIMIT 1",
+  );
+  if (existing) return existing.id;
+
   const tpl = await db.getFirstAsync<WorkoutTemplate>('SELECT * FROM workout_templates WHERE id = ?', templateId);
   if (!tpl) throw new Error('template não encontrado');
 

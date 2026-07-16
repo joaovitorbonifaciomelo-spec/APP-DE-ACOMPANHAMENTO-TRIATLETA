@@ -33,6 +33,17 @@ function StartState() {
   const db = useDb();
   const router = useRouter();
   const { data: templates } = useLiveQuery((dbase) => listTemplates(dbase));
+  const [starting, setStarting] = useState(false);
+
+  const start = async (templateId: number) => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      await startWorkout(db, templateId);
+    } finally {
+      setStarting(false);
+    }
+  };
 
   return (
     <Screen>
@@ -49,7 +60,7 @@ function StartState() {
 
       <View style={{ gap: spacing.cardGap, marginTop: 14 }}>
         {(templates ?? []).map((t) => (
-          <Card key={t.id} onPress={() => startWorkout(db, t.id)}>
+          <Card key={t.id} onPress={() => start(t.id)}>
             <View style={styles.queueRow}>
               <View style={{ flexShrink: 1 }}>
                 <Text style={styles.exerciseName15}>{t.name}</Text>

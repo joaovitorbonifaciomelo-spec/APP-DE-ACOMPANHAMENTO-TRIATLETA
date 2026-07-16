@@ -375,6 +375,11 @@ export async function getActiveWorkout(_db: DB): Promise<ActiveWorkout | null> {
 
 export async function startWorkout(_db: DB, templateId: number): Promise<number> {
   const g = await fetchStrengthGraph();
+
+  // nunca dois treinos ativos (protege contra toque duplo)
+  const existing = [...g.workouts].reverse().find((w) => w.status === 'active');
+  if (existing) return existing.id;
+
   const [tplRes, teRes] = await Promise.all([
     supa().from('workout_templates').select('*').eq('id', templateId).single(),
     supa().from('template_exercises').select('*').eq('template_id', templateId).order('position'),
