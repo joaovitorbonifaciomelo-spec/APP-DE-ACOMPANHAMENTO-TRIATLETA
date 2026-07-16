@@ -74,7 +74,7 @@ export default function RootLayout() {
 }
 
 /**
- * Primeira carga (restore da nuvem ou seed local) e agendamento do push:
+ * Primeira carga (restore da nuvem se houver dados) e agendamento do push:
  * a cada escrita local (debounce) e ao voltar ao primeiro plano.
  */
 function SyncManager({ children }: { children: React.ReactNode }) {

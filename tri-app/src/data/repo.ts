@@ -310,6 +310,16 @@ export async function addTemplate(db: SQLiteDatabase, name: string, items: Templ
   return templateId;
 }
 
+/** Apaga um template; treinos já feitos com ele são preservados (perdem só o vínculo). */
+export async function deleteTemplate(db: SQLiteDatabase, templateId: number): Promise<void> {
+  await db.runAsync('UPDATE strength_workouts SET template_id = NULL, dirty = 1 WHERE template_id = ?', templateId);
+  await tombstoneWhere(db, 'workout_templates', 'id = ?', templateId);
+  // no remoto, template_exercises cai por cascade junto com o template
+  await db.runAsync('DELETE FROM template_exercises WHERE template_id = ?', templateId);
+  await db.runAsync('DELETE FROM workout_templates WHERE id = ?', templateId);
+  notifyDataChanged();
+}
+
 export async function listTemplates(db: SQLiteDatabase): Promise<TemplateSummary[]> {
   const templates = await db.getAllAsync<WorkoutTemplate>('SELECT * FROM workout_templates ORDER BY name');
   const result: TemplateSummary[] = [];

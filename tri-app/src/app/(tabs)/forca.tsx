@@ -8,8 +8,8 @@ import { Card, CTAButton, Mono, SectionLabel } from '@/components/ui';
 import { useDb } from '@/data/db-context';
 import { useLiveQuery } from '@/data/hooks';
 import {
-  addExerciseToWorkout, addSetToLog, cancelWorkout, finishWorkout, getActiveWorkout,
-  listTemplates, startWorkout, updateSet,
+  addExerciseToWorkout, addSetToLog, cancelWorkout, deleteTemplate, finishWorkout,
+  getActiveWorkout, listTemplates, startWorkout, updateSet,
   type ActiveExercise, type ActiveSet, type ActiveWorkout,
 } from '@/data/repo';
 import { colors, font, radius, spacing } from '@/theme/tokens';
@@ -34,6 +34,14 @@ function StartState() {
   const router = useRouter();
   const { data: templates } = useLiveQuery((dbase) => listTemplates(dbase));
   const [starting, setStarting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  // confirmação de apagar volta ao normal após 3s
+  useEffect(() => {
+    if (confirmDeleteId == null) return;
+    const t = setTimeout(() => setConfirmDeleteId(null), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDeleteId]);
 
   const start = async (templateId: number) => {
     if (starting) return;
@@ -42,6 +50,15 @@ function StartState() {
       await startWorkout(db, templateId);
     } finally {
       setStarting(false);
+    }
+  };
+
+  const onDeletePress = (templateId: number) => {
+    if (confirmDeleteId === templateId) {
+      setConfirmDeleteId(null);
+      deleteTemplate(db, templateId);
+    } else {
+      setConfirmDeleteId(templateId);
     }
   };
 
@@ -62,12 +79,17 @@ function StartState() {
         {(templates ?? []).map((t) => (
           <Card key={t.id} onPress={() => start(t.id)}>
             <View style={styles.queueRow}>
-              <View style={{ flexShrink: 1 }}>
+              <View style={{ flex: 1, flexShrink: 1 }}>
                 <Text style={styles.exerciseName15}>{t.name}</Text>
                 <Text style={styles.cardMeta} numberOfLines={1}>
                   {t.exerciseNames.join(' · ')}
                 </Text>
               </View>
+              <Pressable onPress={() => onDeletePress(t.id)} hitSlop={8} style={styles.deleteBtn}>
+                <Text style={[styles.deleteText, confirmDeleteId === t.id && { color: '#ff7a7a' }]}>
+                  {confirmDeleteId === t.id ? 'apagar?' : '×'}
+                </Text>
+              </Pressable>
               <Text style={styles.chevron}>›</Text>
             </View>
           </Card>
@@ -523,6 +545,21 @@ const styles = StyleSheet.create({
   chevron: {
     fontFamily: font.ui,
     fontSize: 16,
+    color: colors.text3,
+  },
+  deleteBtn: {
+    minWidth: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: colors.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    marginRight: 4,
+  },
+  deleteText: {
+    fontFamily: font.uiMedium,
+    fontSize: 13,
     color: colors.text3,
   },
   addExercise: {

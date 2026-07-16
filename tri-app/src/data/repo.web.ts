@@ -324,6 +324,16 @@ export async function addTemplate(_db: DB, name: string, items: TemplateItem[]):
   return tpl.id;
 }
 
+/** Apaga um template; treinos já feitos com ele são preservados (perdem só o vínculo). */
+export async function deleteTemplate(_db: DB, templateId: number): Promise<void> {
+  const { error: unlinkErr } = await supa()
+    .from('strength_workouts').update({ template_id: null }).eq('template_id', templateId);
+  if (unlinkErr) throw unlinkErr;
+  const { error } = await supa().from('workout_templates').delete().eq('id', templateId);
+  if (error) throw error;
+  notifyDataChanged();
+}
+
 export async function listTemplates(_db: DB): Promise<TemplateSummary[]> {
   const [templates, tplExercises, exercises] = await Promise.all([
     selectAll('workout_templates'),

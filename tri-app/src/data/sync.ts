@@ -11,7 +11,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { SYNCED_TABLES, type SyncedTable } from '@/db/schema';
-import { seed } from '@/db/seed';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { notifyDataChanged } from './repo';
 
@@ -139,23 +138,9 @@ type IdMaps = Record<SyncedTable, Map<number, number>>;
 async function pushAll(db: SQLiteDatabase): Promise<void> {
   const supabase = getSupabase();
 
-  // deleções primeiro, em ordem filho -> pai (cascades remotos cuidam do resto)
-  const tombstones = await db.getAllAsync<{ id: number; table_name: string; remote_id: number }>(
-    'SELECT * FROM tombstones',
-  );
-  const order = [...SYNCED_TABLES].reverse();
-  for (const table of order) {
-    const ids = tombstones.filter((t) => t.table_name === table).map((t) => t.remote_id);
-    if (ids.length === 0) continue;
-    const { error } = await supabase.from(table).delete().in('id', ids);
-    if (error) throw error;
-    await db.runAsync(
-      `DELETE FROM tombstones WHERE table_name = ? AND remote_id IN (${ids.map(() => '?').join(',')})`,
-      table, ...ids,
-    );
-  }
-
   // inserts/updates em ordem pai -> filho
+  // (antes das deleções: ex. treinos precisam soltar template_id=null
+  //  antes de o template ser apagado, senão o FK remoto barra)
   for (const table of SYNCED_TABLES) {
     const dirtyRows = await db.getAllAsync<Row>(`SELECT * FROM ${table} WHERE dirty = 1 ORDER BY id`);
     if (dirtyRows.length === 0) continue;
@@ -188,6 +173,22 @@ async function pushAll(db: SQLiteDatabase): Promise<void> {
         );
       }
     }
+  }
+
+  // deleções por último, em ordem filho -> pai (cascades remotos cuidam do resto)
+  const tombstones = await db.getAllAsync<{ id: number; table_name: string; remote_id: number }>(
+    'SELECT * FROM tombstones',
+  );
+  const order = [...SYNCED_TABLES].reverse();
+  for (const table of order) {
+    const ids = tombstones.filter((t) => t.table_name === table).map((t) => t.remote_id);
+    if (ids.length === 0) continue;
+    const { error } = await supabase.from(table).delete().in('id', ids);
+    if (error) throw error;
+    await db.runAsync(
+      `DELETE FROM tombstones WHERE table_name = ? AND remote_id IN (${ids.map(() => '?').join(',')})`,
+      table, ...ids,
+    );
   }
 }
 
@@ -232,9 +233,8 @@ async function localIsEmpty(db: SQLiteDatabase): Promise<boolean> {
 }
 
 /**
- * Primeira carga: com Supabase logado, restaura da nuvem se houver dados lá;
- * senão popula o demo local (e o push subsequente sobe tudo). Offline ou sem
- * Supabase: só garante o seed local.
+ * Primeira carga: com Supabase logado e banco local vazio, restaura da nuvem
+ * (ex. reinstalação). Sem dados na nuvem, o app começa vazio.
  */
 export async function bootstrapData(db: SQLiteDatabase, hasSession: boolean): Promise<void> {
   const empty = await localIsEmpty(db);
@@ -243,16 +243,11 @@ export async function bootstrapData(db: SQLiteDatabase, hasSession: boolean): Pr
   if (isSupabaseConfigured && hasSession) {
     try {
       const pulled = await pullAll(db);
-      if (pulled > 0) {
-        notifyDataChanged();
-        return;
-      }
+      if (pulled > 0) notifyDataChanged();
     } catch (e) {
-      console.warn('[sync] restore falhou (seguindo com seed local):', e);
+      console.warn('[sync] restore falhou:', e);
     }
   }
-  await seed(db);
-  notifyDataChanged();
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null;
