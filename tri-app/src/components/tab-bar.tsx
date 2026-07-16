@@ -4,6 +4,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useCtaOpen } from '@/components/bottom-bar-state';
 import { colors, font, TAB_BAR_HEIGHT } from '@/theme/tokens';
 
 const TABS: { name: string; label: string; Icon: typeof House }[] = [
@@ -27,6 +28,10 @@ export function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const activeRoute = state.routes[state.index]?.name;
+  const ctaOpen = useCtaOpen();
+
+  // telas de registro mostram o CTA fixo no lugar da tab bar (design 1d/2c)
+  if (ctaOpen) return null;
 
   const renderTab = ({ name, label, Icon }: (typeof TABS)[number]) => {
     const active = activeRoute === name;

@@ -6,7 +6,7 @@ import { Card, CTAButton, Mono, SectionLabel } from '@/components/ui';
 import { useDb } from '@/data/db-context';
 import { useLiveQuery } from '@/data/hooks';
 import {
-  addExercise, addExerciseToWorkout, addSetToLog, finishWorkout, getActiveWorkout,
+  addExercise, addExerciseToWorkout, addSetToLog, cancelWorkout, finishWorkout, getActiveWorkout,
   listExercises, listTemplates, startWorkout, updateSet,
   type ActiveExercise, type ActiveSet, type ActiveWorkout,
 } from '@/data/repo';
@@ -72,7 +72,15 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
   const [activeLogId, setActiveLogId] = useState<number | null>(null);
   const [restLeft, setRestLeft] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const elapsed = useElapsed(workout.startedAt);
+
+  // "descartar" pede um segundo toque; volta ao normal após 3s
+  useEffect(() => {
+    if (!confirmDiscard) return;
+    const t = setTimeout(() => setConfirmDiscard(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDiscard]);
 
   // exercício ativo: escolhido pelo usuário, senão o primeiro com série pendente
   const active: ActiveExercise | undefined = useMemo(() => {
@@ -104,8 +112,20 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
             <SectionLabel>Treino de força</SectionLabel>
             <Text style={styles.title}>{workout.name}</Text>
           </View>
-          <View style={styles.timerChip}>
-            <Mono size={13} color={colors.accent}>{fmtDuration(elapsed)}</Mono>
+          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+            <View style={styles.timerChip}>
+              <Mono size={13} color={colors.accent}>{fmtDuration(elapsed)}</Mono>
+            </View>
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                if (confirmDiscard) cancelWorkout(db, workout.id);
+                else setConfirmDiscard(true);
+              }}>
+              <Text style={[styles.discard, confirmDiscard && { color: '#ff7a7a' }]}>
+                {confirmDiscard ? 'toque p/ confirmar' : 'descartar'}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
@@ -352,6 +372,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: 13,
     paddingVertical: 7,
+  },
+  discard: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: colors.text3,
   },
   activeHeader: {
     flexDirection: 'row',
