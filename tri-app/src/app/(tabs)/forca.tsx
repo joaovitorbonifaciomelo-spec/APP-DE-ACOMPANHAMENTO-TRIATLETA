@@ -1,13 +1,15 @@
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { ExercisePicker } from '@/components/exercise-picker';
 import { FixedBottomBar, Screen } from '@/components/screen';
 import { Card, CTAButton, Mono, SectionLabel } from '@/components/ui';
 import { useDb } from '@/data/db-context';
 import { useLiveQuery } from '@/data/hooks';
 import {
-  addExercise, addExerciseToWorkout, addSetToLog, cancelWorkout, finishWorkout, getActiveWorkout,
-  listExercises, listTemplates, startWorkout, updateSet,
+  addExerciseToWorkout, addSetToLog, cancelWorkout, finishWorkout, getActiveWorkout,
+  listTemplates, startWorkout, updateSet,
   type ActiveExercise, type ActiveSet, type ActiveWorkout,
 } from '@/data/repo';
 import { colors, font, radius, spacing } from '@/theme/tokens';
@@ -29,6 +31,7 @@ export default function ForcaScreen() {
 
 function StartState() {
   const db = useDb();
+  const router = useRouter();
   const { data: templates } = useLiveQuery((dbase) => listTemplates(dbase));
 
   return (
@@ -58,6 +61,12 @@ function StartState() {
             </View>
           </Card>
         ))}
+
+        <Pressable
+          onPress={() => router.push('/template-new')}
+          style={({ pressed }) => [styles.addExercise, pressed && { opacity: 0.8 }]}>
+          <Text style={styles.addExerciseText}>+ criar treino</Text>
+        </Pressable>
       </View>
     </Screen>
   );
@@ -278,65 +287,6 @@ function SetRow({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Picker de exercício (adicionar ao treino)
-// ---------------------------------------------------------------------------
-
-function ExercisePicker({
-  visible, onClose, excludeIds, onPick,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  excludeIds: number[];
-  onPick: (exerciseId: number) => void;
-}) {
-  const db = useDb();
-  const { data: exercises } = useLiveQuery((dbase) => listExercises(dbase));
-  const [newName, setNewName] = useState('');
-  const available = (exercises ?? []).filter((e) => !excludeIds.includes(e.id));
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.modalSheet} onPress={() => {}}>
-          <SectionLabel>Adicionar exercício</SectionLabel>
-          <View style={{ gap: 8, marginTop: 12 }}>
-            {available.map((e) => (
-              <Pressable
-                key={e.id}
-                onPress={() => onPick(e.id)}
-                style={({ pressed }) => [styles.pickerItem, pressed && { opacity: 0.8 }]}>
-                <Text style={styles.exerciseName15}>{e.name}</Text>
-                <Text style={styles.cardMeta}>{e.muscle_group}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.pickerNewRow}>
-            <TextInput
-              value={newName}
-              onChangeText={setNewName}
-              placeholder="Novo exercício…"
-              placeholderTextColor={colors.text3}
-              style={styles.pickerNewInput}
-            />
-            <Pressable
-              onPress={async () => {
-                const name = newName.trim();
-                if (!name) return;
-                setNewName('');
-                const id = await addExercise(db, name, '');
-                onPick(id);
-              }}
-              style={({ pressed }) => [styles.pickerAddBtn, pressed && { opacity: 0.85 }]}>
-              <Text style={{ fontFamily: font.uiBold, fontSize: 13, color: colors.onAccent }}>+</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 function useElapsed(startedAt: number): number {
   const [, force] = useState(0);
   useEffect(() => {
@@ -511,47 +461,5 @@ const styles = StyleSheet.create({
     fontFamily: font.uiMedium,
     fontSize: 13,
     color: colors.text2,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.card,
-    borderTopRightRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.screenX,
-    paddingBottom: 34,
-  },
-  pickerItem: {
-    backgroundColor: colors.surface2,
-    borderRadius: radius.input,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-  },
-  pickerNewRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  pickerNewInput: {
-    flex: 1,
-    backgroundColor: colors.surface2,
-    borderRadius: radius.input,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    fontFamily: font.ui,
-    fontSize: 13,
-    color: colors.text,
-  },
-  pickerAddBtn: {
-    width: 44,
-    borderRadius: radius.input,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

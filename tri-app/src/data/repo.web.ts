@@ -285,6 +285,29 @@ function fmtWeight(w: number): string {
   return Number.isInteger(w) ? String(w) : String(w).replace('.', ',');
 }
 
+export interface TemplateItem {
+  exerciseId: number;
+  targetSets: number;
+}
+
+export async function addTemplate(_db: DB, name: string, items: TemplateItem[]): Promise<number> {
+  const { data: tpl, error } = await supa().from('workout_templates').insert({ name }).select('id').single();
+  if (error) throw error;
+  if (items.length > 0) {
+    const { error: teErr } = await supa().from('template_exercises').insert(
+      items.map((item, position) => ({
+        template_id: tpl.id,
+        exercise_id: item.exerciseId,
+        position,
+        target_sets: item.targetSets,
+      })),
+    );
+    if (teErr) throw teErr;
+  }
+  notifyDataChanged();
+  return tpl.id;
+}
+
 export async function listTemplates(_db: DB): Promise<TemplateSummary[]> {
   const [templates, tplExercises, exercises] = await Promise.all([
     selectAll('workout_templates'),

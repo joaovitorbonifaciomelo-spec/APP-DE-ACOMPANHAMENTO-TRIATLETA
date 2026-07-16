@@ -292,6 +292,24 @@ export interface TemplateSummary extends WorkoutTemplate {
   exerciseNames: string[];
 }
 
+export interface TemplateItem {
+  exerciseId: number;
+  targetSets: number;
+}
+
+export async function addTemplate(db: SQLiteDatabase, name: string, items: TemplateItem[]): Promise<number> {
+  const r = await db.runAsync('INSERT INTO workout_templates (name) VALUES (?)', name);
+  const templateId = Number(r.lastInsertRowId);
+  for (let i = 0; i < items.length; i++) {
+    await db.runAsync(
+      'INSERT INTO template_exercises (template_id, exercise_id, position, target_sets) VALUES (?, ?, ?, ?)',
+      templateId, items[i].exerciseId, i, items[i].targetSets,
+    );
+  }
+  notifyDataChanged();
+  return templateId;
+}
+
 export async function listTemplates(db: SQLiteDatabase): Promise<TemplateSummary[]> {
   const templates = await db.getAllAsync<WorkoutTemplate>('SELECT * FROM workout_templates ORDER BY name');
   const result: TemplateSummary[] = [];
