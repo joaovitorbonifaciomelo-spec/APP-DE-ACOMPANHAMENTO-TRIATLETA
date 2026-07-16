@@ -87,13 +87,44 @@ function StartState() {
 // Treino ativo
 // ---------------------------------------------------------------------------
 
+type SetPatch = { weight?: number | null; reps?: number | null; done?: boolean };
+
 function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
   const db = useDb();
   const [activeLogId, setActiveLogId] = useState<number | null>(null);
   const [restLeft, setRestLeft] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const elapsed = useElapsed(workout.startedAt);
+
+  // UI otimista: mudanças de série aplicam na hora e gravam em segundo plano
+  const [overlay, setOverlay] = useState<Record<number, SetPatch>>({});
+  const pendingWrites = React.useRef<Promise<unknown>[]>([]);
+  useEffect(() => {
+    setOverlay({});
+    pendingWrites.current = [];
+  }, [workout.id]);
+
+  const merged: ActiveWorkout = useMemo(
+    () => ({
+      ...workout,
+      exercises: workout.exercises.map((e) => ({
+        ...e,
+        sets: e.sets.map((s) => {
+          const p = overlay[s.id];
+          if (!p) return s;
+          return {
+            ...s,
+            weight: p.weight !== undefined ? p.weight : s.weight,
+            reps: p.reps !== undefined ? p.reps : s.reps,
+            done: p.done !== undefined ? p.done : s.done,
+          };
+        }),
+      })),
+    }),
+    [workout, overlay],
+  );
 
   // "descartar" pede um segundo toque; volta ao normal após 3s
   useEffect(() => {
@@ -104,12 +135,12 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
 
   // exercício ativo: escolhido pelo usuário, senão o primeiro com série pendente
   const active: ActiveExercise | undefined = useMemo(() => {
-    const byChoice = workout.exercises.find((e) => e.logId === activeLogId);
+    const byChoice = merged.exercises.find((e) => e.logId === activeLogId);
     if (byChoice) return byChoice;
-    return workout.exercises.find((e) => e.sets.some((s) => !s.done)) ?? workout.exercises[0];
-  }, [workout, activeLogId]);
+    return merged.exercises.find((e) => e.sets.some((s) => !s.done)) ?? merged.exercises[0];
+  }, [merged, activeLogId]);
 
-  const queue = workout.exercises.filter((e) => e.logId !== active?.logId);
+  const queue = merged.exercises.filter((e) => e.logId !== active?.logId);
   const nextLogId = queue.find((e) => e.sets.some((s) => !s.done))?.logId;
 
   // countdown do descanso
@@ -119,9 +150,28 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
     return () => clearTimeout(t);
   }, [restLeft]);
 
+  const commitSet = (setId: number, patch: SetPatch) => {
+    setOverlay((prev) => ({ ...prev, [setId]: { ...prev[setId], ...patch } }));
+    pendingWrites.current.push(
+      updateSet(db, setId, patch).catch((e) => console.warn('[serie] gravação falhou:', e)),
+    );
+  };
+
   const onToggleDone = (set: ActiveSet) => {
-    updateSet(db, set.id, { done: !set.done });
-    if (!set.done) setRestLeft(REST_DEFAULT_SEC); // check dispara o descanso
+    const nowDone = !set.done;
+    commitSet(set.id, { done: nowDone });
+    if (nowDone) setRestLeft(REST_DEFAULT_SEC); // check dispara o descanso
+  };
+
+  const onFinish = async () => {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      await Promise.all(pendingWrites.current); // garante que tudo chegou no banco
+      await finishWorkout(db, workout.id);
+    } finally {
+      setFinishing(false);
+    }
   };
 
   return (
@@ -175,7 +225,14 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
             {active.sets.map((set, i) => {
               const isCurrent = !set.done && active.sets.findIndex((s) => !s.done) === i;
               return (
-                <SetRow key={set.id} set={set} index={i} isCurrent={isCurrent} onToggleDone={() => onToggleDone(set)} />
+                <SetRow
+                  key={set.id}
+                  set={set}
+                  index={i}
+                  isCurrent={isCurrent}
+                  onToggleDone={() => onToggleDone(set)}
+                  onCommit={(patch) => commitSet(set.id, patch)}
+                />
               );
             })}
 
@@ -224,7 +281,11 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
       </Screen>
 
       <FixedBottomBar>
-        <CTAButton label="Finalizar treino" onPress={() => finishWorkout(db, workout.id)} />
+        <CTAButton
+          label={finishing ? 'Salvando…' : 'Finalizar treino'}
+          onPress={onFinish}
+          style={finishing ? { opacity: 0.6 } : undefined}
+        />
       </FixedBottomBar>
 
       <ExercisePicker
@@ -245,9 +306,14 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
 // ---------------------------------------------------------------------------
 
 function SetRow({
-  set, index, isCurrent, onToggleDone,
-}: { set: ActiveSet; index: number; isCurrent: boolean; onToggleDone: () => void }) {
-  const db = useDb();
+  set, index, isCurrent, onToggleDone, onCommit,
+}: {
+  set: ActiveSet;
+  index: number;
+  isCurrent: boolean;
+  onToggleDone: () => void;
+  onCommit: (patch: SetPatch) => void;
+}) {
   return (
     <View style={styles.setRow}>
       <Mono size={13} color={colors.text2} style={{ width: 40 }}>{index + 1}</Mono>
@@ -260,8 +326,7 @@ function SetRow({
           placeholder="—"
           placeholderTextColor={colors.text3}
           onEndEditing={(e) => {
-            const w = parseDecimal(e.nativeEvent.text);
-            updateSet(db, set.id, { weight: w });
+            onCommit({ weight: parseDecimal(e.nativeEvent.text) });
           }}
           style={[styles.setInput, isCurrent && styles.setInputCurrent]}
         />
@@ -276,7 +341,7 @@ function SetRow({
           placeholderTextColor={colors.text3}
           onEndEditing={(e) => {
             const r = parseDecimal(e.nativeEvent.text);
-            updateSet(db, set.id, { reps: r != null ? Math.round(r) : null });
+            onCommit({ reps: r != null ? Math.round(r) : null });
           }}
           style={styles.setInput}
         />

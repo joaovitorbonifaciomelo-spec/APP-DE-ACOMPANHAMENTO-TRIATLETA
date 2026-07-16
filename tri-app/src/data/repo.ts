@@ -430,7 +430,7 @@ export async function updateSet(
   if (patch.weight !== undefined) await db.runAsync('UPDATE sets SET weight = ?, dirty = 1 WHERE id = ?', patch.weight, setId);
   if (patch.reps !== undefined) await db.runAsync('UPDATE sets SET reps = ?, dirty = 1 WHERE id = ?', patch.reps, setId);
   if (patch.done !== undefined) await db.runAsync('UPDATE sets SET done = ?, dirty = 1 WHERE id = ?', patch.done ? 1 : 0, setId);
-  notifyDataChanged();
+  // sem notifyDataChanged: a tela do treino ativo atualiza otimisticamente
 }
 
 export async function addSetToLog(db: SQLiteDatabase, logId: number): Promise<void> {

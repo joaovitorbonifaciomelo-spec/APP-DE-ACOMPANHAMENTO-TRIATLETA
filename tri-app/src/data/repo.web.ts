@@ -9,7 +9,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { CardioActivity, Exercise, Race, RaceSegment, Sport, WorkoutTemplate } from '@/db/types';
 import { getSupabase } from '@/lib/supabase';
 import { mondayOf, toISODate } from '@/utils/format';
-import { notifyDataChanged } from './events';
+import { notifyDataChanged, subscribeData as subscribeDataInternal } from './events';
 
 export { notifyDataChanged, subscribeData } from './events';
 
@@ -37,16 +37,32 @@ interface StrengthGraph {
   sets: Row[]; // ordenados por set_index
 }
 
+// cache curto: evita rajadas de 4 fetches por consulta ao navegar entre telas
+const GRAPH_TTL_MS = 10_000;
+let graphCache: { at: number; promise: Promise<StrengthGraph> } | null = null;
+
+function clearGraphCache(): void {
+  graphCache = null;
+}
+
+subscribeDataInternal(clearGraphCache);
+
 async function fetchStrengthGraph(): Promise<StrengthGraph> {
-  const [exercises, workouts, logs, sets] = await Promise.all([
-    selectAll('exercises'),
-    selectAll('strength_workouts'),
-    selectAll('exercise_logs'),
-    selectAll('sets'),
-  ]);
-  workouts.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.id - b.id);
-  sets.sort((a, b) => a.set_index - b.set_index);
-  return { exercises, workouts, logs, sets };
+  if (graphCache && Date.now() - graphCache.at < GRAPH_TTL_MS) return graphCache.promise;
+  const promise = (async () => {
+    const [exercises, workouts, logs, sets] = await Promise.all([
+      selectAll('exercises'),
+      selectAll('strength_workouts'),
+      selectAll('exercise_logs'),
+      selectAll('sets'),
+    ]);
+    workouts.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.id - b.id);
+    sets.sort((a, b) => a.set_index - b.set_index);
+    return { exercises, workouts, logs, sets };
+  })();
+  graphCache = { at: Date.now(), promise };
+  promise.catch(clearGraphCache);
+  return promise;
 }
 
 const doneSetsOf = (g: StrengthGraph, logId: number) =>
@@ -427,6 +443,10 @@ export async function startWorkout(_db: DB, templateId: number): Promise<number>
   return workout.id;
 }
 
+/**
+ * Escrita silenciosa: a tela do treino ativo atualiza otimisticamente,
+ * então não dispara refetch global a cada série marcada — só invalida o cache.
+ */
 export async function updateSet(
   _db: DB,
   setId: number,
@@ -439,7 +459,7 @@ export async function updateSet(
   if (Object.keys(payload).length === 0) return;
   const { error } = await supa().from('sets').update(payload).eq('id', setId);
   if (error) throw error;
-  notifyDataChanged();
+  clearGraphCache();
 }
 
 export async function addSetToLog(_db: DB, logId: number): Promise<void> {
