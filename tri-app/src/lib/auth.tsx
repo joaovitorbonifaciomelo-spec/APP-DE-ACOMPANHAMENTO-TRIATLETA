@@ -71,8 +71,8 @@ function LoginScreen() {
 
   const submit = async () => {
     const mail = email.trim().toLowerCase();
-    if (!mail || password.length < 6) {
-      setError('Informe o e-mail e uma senha com pelo menos 6 caracteres.');
+    if (!mail || password.length < 8) {
+      setError('Informe o e-mail e uma senha com pelo menos 8 caracteres.');
       return;
     }
     setBusy(true);
