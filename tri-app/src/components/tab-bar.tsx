@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Dumbbell, House, Plus, Timer, Trophy } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useCtaOpen } from '@/components/bottom-bar-state';
 import { colors, font } from '@/theme/tokens';
@@ -67,10 +67,11 @@ export function TabBar({ state, navigation }: TabBarProps) {
 
 const styles = StyleSheet.create({
   wrap: {
-    position: 'absolute',
+    // 'fixed' na web: ancora no viewport real, ignorando recuos de containers
+    position: Platform.OS === 'web' ? ('fixed' as 'absolute') : 'absolute',
     left: 0,
     right: 0,
-    bottom: 10,
+    bottom: 8,
     alignItems: 'center',
   },
   island: {

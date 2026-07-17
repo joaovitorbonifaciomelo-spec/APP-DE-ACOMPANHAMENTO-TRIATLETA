@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { pushCtaOpen } from '@/components/bottom-bar-state';
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   ctaBar: {
-    position: 'absolute',
+    position: Platform.OS === 'web' ? ('fixed' as 'absolute') : 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
