@@ -58,7 +58,7 @@ export const spacing = {
   sectionGap: 17,
 } as const;
 
-/** Altura reservada para a tab bar (conteúdo deve ter paddingBottom >= isso) */
-export const TAB_BAR_HEIGHT = 46;
+/** Espaço reservado p/ a tab bar flutuante (altura 60 + offset 10 da borda) */
+export const TAB_BAR_HEIGHT = 70;
 /** Deslocamento extra p/ botão central elevado */
 export const CTA_BAR_HEIGHT = 84;

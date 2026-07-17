@@ -4,7 +4,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useCtaOpen } from '@/components/bottom-bar-state';
-import { colors, font, TAB_BAR_HEIGHT } from '@/theme/tokens';
+import { colors, font } from '@/theme/tokens';
 
 const TABS: { name: string; label: string; Icon: typeof House }[] = [
   { name: 'index', label: 'Início', Icon: House },
@@ -20,8 +20,8 @@ export interface TabBarProps {
 }
 
 /**
- * Tab bar do design: fundo rgba(12,14,17,.92), borda superior #1f242b,
- * 4 itens + botão central circular "+" 44px em accent, elevado.
+ * Tab bar flutuante em "ilha" (estilo iOS moderno): pill arredondado
+ * descolado das bordas, 4 itens + botão central "+" em accent.
  */
 export function TabBar({ state, navigation }: TabBarProps) {
   const router = useRouter();
@@ -38,60 +38,67 @@ export function TabBar({ state, navigation }: TabBarProps) {
       <Pressable
         key={name}
         style={styles.tab}
-        hitSlop={8}
+        hitSlop={6}
         onPress={() => {
           if (!active) navigation.navigate(name);
         }}>
-        <Icon size={21} color={color} strokeWidth={active ? 2.4 : 2} />
+        <Icon size={20} color={color} strokeWidth={active ? 2.4 : 2} />
         <Text style={[styles.tabLabel, { color: active ? colors.accent : colors.text2 }]}>{label}</Text>
       </Pressable>
     );
   };
 
-  // barra encostada na borda; o home indicator do iOS flutua por cima
   return (
-    <View style={[styles.bar, { height: TAB_BAR_HEIGHT }]}>
-      {TABS.slice(0, 2).map(renderTab)}
+    <View pointerEvents="box-none" style={styles.wrap}>
+      <View style={styles.island}>
+        {TABS.slice(0, 2).map(renderTab)}
 
-      <View style={styles.plusSlot}>
         <Pressable
           onPress={() => router.push('/quick-add')}
           style={({ pressed }) => [styles.plusButton, pressed && { opacity: 0.85 }]}>
           <Plus size={22} color={colors.onAccent} strokeWidth={2.6} />
         </Pressable>
-      </View>
 
-      {TABS.slice(2).map(renderTab)}
+        {TABS.slice(2).map(renderTab)}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  wrap: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: 10,
+    alignItems: 'center',
+  },
+  island: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: colors.barBg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    alignItems: 'center',
+    backgroundColor: 'rgba(20,23,28,0.96)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 32,
+    height: 60,
+    paddingHorizontal: 10,
+    gap: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
   },
   tab: {
-    flex: 1,
+    minWidth: 58,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
-    paddingTop: 2,
+    paddingHorizontal: 6,
   },
   tabLabel: {
     fontFamily: font.uiMedium,
     fontSize: 10,
-  },
-  plusSlot: {
-    flex: 1,
-    alignItems: 'center',
   },
   plusButton: {
     width: 44,
@@ -100,7 +107,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -24,
+    marginHorizontal: 8,
     shadowColor: colors.accent,
     shadowOpacity: 0.35,
     shadowRadius: 12,
