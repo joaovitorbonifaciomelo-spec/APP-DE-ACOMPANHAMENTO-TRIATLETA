@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import { Dumbbell, House, Plus, Timer, Trophy } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCtaOpen } from '@/components/bottom-bar-state';
 import { colors, font, TAB_BAR_HEIGHT } from '@/theme/tokens';
@@ -25,7 +24,6 @@ export interface TabBarProps {
  * 4 itens + botão central circular "+" 44px em accent, elevado.
  */
 export function TabBar({ state, navigation }: TabBarProps) {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const activeRoute = state.routes[state.index]?.name;
   const ctaOpen = useCtaOpen();
@@ -50,11 +48,9 @@ export function TabBar({ state, navigation }: TabBarProps) {
     );
   };
 
-  // ocupa a área do home indicator; só uma folga mínima abaixo dos rótulos
-  const bottomPad = Math.min(insets.bottom, 8);
-
+  // barra encostada na borda; o home indicator do iOS flutua por cima
   return (
-    <View style={[styles.bar, { paddingBottom: bottomPad, height: TAB_BAR_HEIGHT + bottomPad }]}>
+    <View style={[styles.bar, { height: TAB_BAR_HEIGHT }]}>
       {TABS.slice(0, 2).map(renderTab)}
 
       <View style={styles.plusSlot}>
@@ -86,8 +82,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingTop: 6,
+    gap: 3,
+    paddingTop: 2,
   },
   tabLabel: {
     fontFamily: font.uiMedium,

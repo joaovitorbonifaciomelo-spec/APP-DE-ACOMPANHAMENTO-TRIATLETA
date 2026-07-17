@@ -47,10 +47,9 @@ export function Screen({
 
 /** Barra fixa inferior para CTA — substitui a tab bar enquanto visível (como no design) */
 export function FixedBottomBar({ children }: { children: React.ReactNode }) {
-  const insets = useSafeAreaInsets();
   useEffect(() => pushCtaOpen(), []);
   return (
-    <View style={[styles.ctaBar, { paddingBottom: Math.min(insets.bottom, 8) + 12 }]}>
+    <View style={[styles.ctaBar, { paddingBottom: 12 }]}>
       {children}
     </View>
   );

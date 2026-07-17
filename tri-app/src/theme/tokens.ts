@@ -59,6 +59,6 @@ export const spacing = {
 } as const;
 
 /** Altura reservada para a tab bar (conteúdo deve ter paddingBottom >= isso) */
-export const TAB_BAR_HEIGHT = 54;
+export const TAB_BAR_HEIGHT = 46;
 /** Deslocamento extra p/ botão central elevado */
 export const CTA_BAR_HEIGHT = 84;
