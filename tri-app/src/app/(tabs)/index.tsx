@@ -70,7 +70,7 @@ export default function Dashboard() {
 
       {/* Evolução de carga */}
       <View style={{ marginTop: spacing.sectionGap }}>
-        <SectionTitle link="ver tudo" onLinkPress={() => router.navigate('/forca')}>
+        <SectionTitle link="ver tudo" onLinkPress={() => router.push('/exercise')}>
           Evolução de carga
         </SectionTitle>
         <View style={{ gap: spacing.cardGap, marginTop: 10 }}>

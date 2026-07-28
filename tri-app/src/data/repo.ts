@@ -333,6 +333,30 @@ export async function listTemplates(db: SQLiteDatabase): Promise<TemplateSummary
   return result;
 }
 
+export interface RecentWorkoutSummary {
+  id: number;
+  name: string;
+  date: string;
+  durationSec: number | null;
+  exerciseCount: number;
+}
+
+/** treinos de força concluídos, mais recentes primeiro (histórico na aba Força) */
+export async function listRecentWorkouts(db: SQLiteDatabase, limit = 5): Promise<RecentWorkoutSummary[]> {
+  const rows = await db.getAllAsync<{ id: number; name: string; date: string; duration_sec: number | null; exercise_count: number }>(
+    `SELECT w.id, w.name, w.date, w.duration_sec,
+            (SELECT COUNT(DISTINCT l.id) FROM exercise_logs l WHERE l.workout_id = w.id) AS exercise_count
+     FROM strength_workouts w
+     WHERE w.status = 'done'
+     ORDER BY w.date DESC, w.id DESC
+     LIMIT ?`,
+    limit,
+  );
+  return rows.map((r) => ({
+    id: r.id, name: r.name, date: r.date, durationSec: r.duration_sec, exerciseCount: r.exercise_count,
+  }));
+}
+
 /** sets 'done' da última sessão concluída do exercício (antes do treino atual) */
 async function previousSets(db: SQLiteDatabase, exerciseId: number, excludeWorkoutId: number): Promise<SetRow[]> {
   const lastLog = await db.getFirstAsync<{ id: number }>(
@@ -417,14 +441,14 @@ export async function startWorkout(db: SQLiteDatabase, templateId: number): Prom
       workoutId, te.exercise_id, te.position,
     );
     const logId = Number(lr.lastInsertRowId);
-    // pré-preenche com a sessão anterior (comportamento do design)
+    // nº de séries herda da sessão anterior quando o template não define; o
+    // campo em si começa vazio — a coluna "Anterior" já mostra a referência
     const prev = await previousSets(db, te.exercise_id, workoutId);
     const nSets = Math.max(te.target_sets, 0) || prev.length || 3;
     for (let i = 0; i < nSets; i++) {
-      const source = prev[i] ?? prev[prev.length - 1];
       await db.runAsync(
-        'INSERT INTO sets (log_id, set_index, weight, reps, done) VALUES (?, ?, ?, ?, 0)',
-        logId, i, source?.weight ?? null, source?.reps ?? null,
+        'INSERT INTO sets (log_id, set_index, weight, reps, done) VALUES (?, ?, NULL, NULL, 0)',
+        logId, i,
       );
     }
   }
@@ -476,10 +500,9 @@ export async function addExerciseToWorkout(db: SQLiteDatabase, workoutId: number
   const prev = await previousSets(db, exerciseId, workoutId);
   const nSets = prev.length || 3;
   for (let i = 0; i < nSets; i++) {
-    const source = prev[i] ?? prev[prev.length - 1];
     await db.runAsync(
-      'INSERT INTO sets (log_id, set_index, weight, reps, done) VALUES (?, ?, ?, ?, 0)',
-      logId, i, source?.weight ?? null, source?.reps ?? null,
+      'INSERT INTO sets (log_id, set_index, weight, reps, done) VALUES (?, ?, NULL, NULL, 0)',
+      logId, i,
     );
   }
   notifyDataChanged();

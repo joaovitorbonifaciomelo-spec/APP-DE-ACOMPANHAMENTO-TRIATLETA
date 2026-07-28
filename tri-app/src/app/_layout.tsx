@@ -57,6 +57,7 @@ export default function RootLayout() {
                 animationDuration: 200,
               }}>
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="exercise/index" options={{ animation: 'slide_from_right', animationDuration: 220 }} />
               <Stack.Screen name="exercise/[id]" options={{ animation: 'slide_from_right', animationDuration: 220 }} />
               <Stack.Screen
                 name="quick-add"

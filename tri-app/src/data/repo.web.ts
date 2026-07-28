@@ -353,6 +353,30 @@ export async function listTemplates(_db: DB): Promise<TemplateSummary[]> {
     }));
 }
 
+export interface RecentWorkoutSummary {
+  id: number;
+  name: string;
+  date: string;
+  durationSec: number | null;
+  exerciseCount: number;
+}
+
+/** treinos de força concluídos, mais recentes primeiro (histórico na aba Força) */
+export async function listRecentWorkouts(_db: DB, limit = 5): Promise<RecentWorkoutSummary[]> {
+  const g = await fetchStrengthGraph();
+  const done = g.workouts
+    .filter((w) => w.status === 'done')
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.id - a.id)
+    .slice(0, limit);
+  return done.map((w) => ({
+    id: w.id,
+    name: w.name,
+    date: w.date,
+    durationSec: w.duration_sec,
+    exerciseCount: g.logs.filter((l) => l.workout_id === w.id).length,
+  }));
+}
+
 /** sets da última sessão concluída do exercício, exceto o treino atual */
 function previousSetsFrom(g: StrengthGraph, exerciseId: number, excludeWorkoutId: number): Row[] {
   const sessions = sessionsOf(g, exerciseId).filter((s) => s.workout.id !== excludeWorkoutId);
@@ -445,14 +469,12 @@ export async function startWorkout(_db: DB, templateId: number): Promise<number>
       const setsRows: Row[] = [];
       teRows.forEach((te, i) => {
         const logId = (logRows as Row[])[i].id;
+        // nº de séries herda da sessão anterior quando o template não define; o
+        // campo em si começa vazio — a coluna "Anterior" já mostra a referência
         const prev = previousSetsFrom(g, te.exercise_id, workout.id);
         const nSets = Math.max(te.target_sets, 0) || prev.length || 3;
         for (let s = 0; s < nSets; s++) {
-          const source = prev[s] ?? prev[prev.length - 1];
-          setsRows.push({
-            log_id: logId, set_index: s,
-            weight: source?.weight ?? null, reps: source?.reps ?? null, done: false,
-          });
+          setsRows.push({ log_id: logId, set_index: s, weight: null, reps: null, done: false });
         }
       });
       if (setsRows.length > 0) {
@@ -532,16 +554,9 @@ export async function addExerciseToWorkout(_db: DB, workoutId: number, exerciseI
 
   const prev = previousSetsFrom(g, exerciseId, workoutId);
   const nSets = prev.length || 3;
-  const rows = Array.from({ length: nSets }, (_, i) => {
-    const source = prev[i] ?? prev[prev.length - 1];
-    return {
-      log_id: log.id,
-      set_index: i,
-      weight: source?.weight ?? null,
-      reps: source?.reps ?? null,
-      done: false,
-    };
-  });
+  const rows = Array.from({ length: nSets }, (_, i) => ({
+    log_id: log.id, set_index: i, weight: null, reps: null, done: false,
+  }));
   const { error: sErr } = await supa().from('sets').insert(rows);
   if (sErr) {
     await supa().from('exercise_logs').delete().eq('id', log.id);

@@ -9,11 +9,11 @@ import { useDb } from '@/data/db-context';
 import { useLiveQuery } from '@/data/hooks';
 import {
   addExerciseToWorkout, addSetToLog, cancelWorkout, deleteTemplate, finishWorkout,
-  getActiveWorkout, listTemplates, startWorkout, updateSet,
+  getActiveWorkout, listRecentWorkouts, listTemplates, startWorkout, updateSet,
   type ActiveExercise, type ActiveSet, type ActiveWorkout,
 } from '@/data/repo';
 import { colors, font, radius, spacing } from '@/theme/tokens';
-import { fmtDuration, fmtNumber, parseDecimal } from '@/utils/format';
+import { fmtDayMonth, fmtDuration, fmtNumber, parseDecimal } from '@/utils/format';
 
 const REST_DEFAULT_SEC = 120;
 /** troca de exercício sem toque em >5h: provavelmente ficou esquecido aberto */
@@ -37,6 +37,7 @@ function StartState() {
   const db = useDb();
   const router = useRouter();
   const { data: templates } = useLiveQuery((dbase) => listTemplates(dbase));
+  const { data: recentWorkouts } = useLiveQuery((dbase) => listRecentWorkouts(dbase, 5));
   const [starting, setStarting] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
@@ -112,6 +113,27 @@ function StartState() {
           <Text style={styles.addExerciseText}>+ criar treino</Text>
         </Pressable>
       </View>
+
+      {recentWorkouts && recentWorkouts.length > 0 ? (
+        <View style={{ marginTop: spacing.sectionGap }}>
+          <Text style={styles.sectionTitle}>Histórico</Text>
+          <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
+            {recentWorkouts.map((w) => (
+              <Card key={w.id}>
+                <View style={styles.queueRow}>
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={styles.exerciseName15}>{w.name}</Text>
+                    <Text style={styles.cardMeta}>
+                      {fmtDayMonth(w.date)} · {w.exerciseCount} {w.exerciseCount === 1 ? 'exercício' : 'exercícios'}
+                      {w.durationSec ? ` · ${fmtDuration(w.durationSec)}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -507,6 +529,11 @@ const styles = StyleSheet.create({
     color: colors.text2,
     marginTop: 14,
     lineHeight: 18,
+  },
+  sectionTitle: {
+    fontFamily: font.uiSemiBold,
+    fontSize: 15,
+    color: colors.text,
   },
   timerChip: {
     backgroundColor: colors.surface2,
