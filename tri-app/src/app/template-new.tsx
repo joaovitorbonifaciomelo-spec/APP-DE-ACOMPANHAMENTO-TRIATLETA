@@ -24,14 +24,25 @@ export default function NewTemplateScreen() {
   const [name, setName] = useState('');
   const [items, setItems] = useState<Item[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const nameOf = (id: number) => (exercises ?? []).find((e) => e.id === id)?.name ?? '…';
   const canSave = name.trim().length > 0 && items.length > 0;
 
   const save = async () => {
-    if (!canSave) return;
-    await addTemplate(db, name.trim(), items);
-    router.back();
+    if (!canSave || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await addTemplate(db, name.trim(), items);
+      router.back();
+    } catch (e) {
+      setSaveError('Não foi possível salvar. Verifique sua conexão e tente de novo.');
+      console.warn('[template] falha ao salvar:', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const setSets = (index: number, delta: number) => {
@@ -101,7 +112,12 @@ export default function NewTemplateScreen() {
       </Screen>
 
       <FixedBottomBar>
-        <CTAButton label="Salvar treino" onPress={save} style={!canSave ? { opacity: 0.4 } : undefined} />
+        {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
+        <CTAButton
+          label={saving ? 'Salvando…' : 'Salvar treino'}
+          onPress={save}
+          style={!canSave || saving ? { opacity: 0.4 } : undefined}
+        />
       </FixedBottomBar>
 
       <ExercisePicker
@@ -147,8 +163,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 12,
     fontFamily: font.uiMedium,
-    fontSize: 14,
+    // 16px evita o zoom automático do Safari/iOS ao focar o campo
+    fontSize: 16,
     color: colors.text,
+  },
+  errorText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: '#ff7a7a',
+    lineHeight: 17,
+    marginBottom: 10,
   },
   itemCard: {
     flexDirection: 'row',

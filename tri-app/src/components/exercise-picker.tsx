@@ -22,6 +22,7 @@ export function ExercisePicker({
   const db = useDb();
   const { data: exercises } = useLiveQuery((dbase) => listExercises(dbase));
   const [newName, setNewName] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const available = (exercises ?? []).filter((e) => !excludeIds.includes(e.id));
 
   return (
@@ -29,6 +30,7 @@ export function ExercisePicker({
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <SectionLabel>Adicionar exercício</SectionLabel>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <View style={{ gap: 8, marginTop: 12 }}>
             {available.map((e) => (
               <Pressable
@@ -52,9 +54,15 @@ export function ExercisePicker({
               onPress={async () => {
                 const name = newName.trim();
                 if (!name) return;
-                setNewName('');
-                const id = await addExercise(db, name, '');
-                onPick(id);
+                setError(null);
+                try {
+                  const id = await addExercise(db, name, '');
+                  setNewName('');
+                  onPick(id);
+                } catch (e) {
+                  setError('Não foi possível adicionar. Tente de novo.');
+                  console.warn('[exercicio] falha ao criar:', e);
+                }
               }}
               style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}>
               <Text style={{ fontFamily: font.uiBold, fontSize: 13, color: colors.onAccent }}>+</Text>
@@ -110,7 +118,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 11,
     fontFamily: font.ui,
-    fontSize: 13,
+    // 16px evita o zoom automático do Safari/iOS ao focar o campo
+    fontSize: 16,
     color: colors.text,
   },
   addBtn: {
@@ -119,5 +128,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: '#ff7a7a',
+    lineHeight: 17,
+    marginTop: 8,
   },
 });

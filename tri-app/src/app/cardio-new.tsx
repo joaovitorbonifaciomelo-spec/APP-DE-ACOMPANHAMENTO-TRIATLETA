@@ -22,6 +22,8 @@ export default function NewCardioScreen() {
   const [durationText, setDurationText] = useState('');
   const [notes, setNotes] = useState('');
   const [focused, setFocused] = useState<'dist' | 'time' | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const distanceUnit = sport === 'swim' ? 'm' : 'km';
 
@@ -36,18 +38,28 @@ export default function NewCardioScreen() {
   const canSave = pace != null;
 
   const save = async () => {
+    if (saving) return;
     const dist = parseDecimal(distanceText);
     const dur = parseDuration(durationText);
     if (dist == null || dur == null) return;
-    await addCardio(db, {
-      sport,
-      title: '',
-      date: daysAgoISO(daysAgo),
-      distance_m: sport === 'swim' ? dist : dist * 1000,
-      duration_sec: dur,
-      notes: notes.trim(),
-    });
-    router.back();
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await addCardio(db, {
+        sport,
+        title: '',
+        date: daysAgoISO(daysAgo),
+        distance_m: sport === 'swim' ? dist : dist * 1000,
+        duration_sec: dur,
+        notes: notes.trim(),
+      });
+      router.back();
+    } catch (e) {
+      setSaveError('Não foi possível salvar. Verifique sua conexão e tente de novo.');
+      console.warn('[cardio] falha ao salvar:', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const dateISO = daysAgoISO(daysAgo);
@@ -161,7 +173,12 @@ export default function NewCardioScreen() {
       </Screen>
 
       <FixedBottomBar>
-        <CTAButton label="Salvar treino" onPress={save} style={!canSave ? { opacity: 0.4 } : undefined} />
+        {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
+        <CTAButton
+          label={saving ? 'Salvando…' : 'Salvar treino'}
+          onPress={save}
+          style={!canSave || saving ? { opacity: 0.4 } : undefined}
+        />
       </FixedBottomBar>
     </View>
   );
@@ -282,7 +299,15 @@ const styles = StyleSheet.create({
     minHeight: 96,
     padding: 13,
     fontFamily: font.ui,
-    fontSize: 13,
+    // 16px evita o zoom automático do Safari/iOS ao focar o campo
+    fontSize: 16,
     color: colors.text,
+  },
+  errorText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: '#ff7a7a',
+    lineHeight: 17,
+    marginBottom: 10,
   },
 });

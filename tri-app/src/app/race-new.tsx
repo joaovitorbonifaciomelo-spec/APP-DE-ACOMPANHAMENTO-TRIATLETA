@@ -22,11 +22,14 @@ export default function NewRaceScreen() {
   const [runText, setRunText] = useState(''); // km
   const [goalText, setGoalText] = useState('');
 
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const dateISO = parseBRDate(dateText);
   const canSave = name.trim().length > 0 && dateISO != null;
 
   const save = async () => {
-    if (!canSave || dateISO == null) return;
+    if (!canSave || dateISO == null || saving) return;
     const segments: RaceSegment[] = [];
     const swim = parseDecimal(swimText);
     const bike = parseDecimal(bikeText);
@@ -35,15 +38,24 @@ export default function NewRaceScreen() {
     if (bike != null && bike > 0) segments.push({ sport: 'bike', label: 'pedal', distance_m: bike * 1000 });
     if (run != null && run > 0) segments.push({ sport: 'run', label: 'corrida', distance_m: run * 1000 });
 
-    await addRace(db, {
-      name: name.trim(),
-      date: dateISO,
-      location: location.trim(),
-      start_time: startTime.trim(),
-      segments,
-      goal_sec: goalText.trim() ? parseDuration(goalText) : null,
-    });
-    router.back();
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await addRace(db, {
+        name: name.trim(),
+        date: dateISO,
+        location: location.trim(),
+        start_time: startTime.trim(),
+        segments,
+        goal_sec: goalText.trim() ? parseDuration(goalText) : null,
+      });
+      router.back();
+    } catch (e) {
+      setSaveError('Não foi possível salvar. Verifique sua conexão e tente de novo.');
+      console.warn('[prova] falha ao salvar:', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -74,7 +86,12 @@ export default function NewRaceScreen() {
       </Screen>
 
       <FixedBottomBar>
-        <CTAButton label="Salvar prova" onPress={save} style={!canSave ? { opacity: 0.4 } : undefined} />
+        {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
+        <CTAButton
+          label={saving ? 'Salvando…' : 'Salvar prova'}
+          onPress={save}
+          style={!canSave || saving ? { opacity: 0.4 } : undefined}
+        />
       </FixedBottomBar>
     </View>
   );
@@ -154,7 +171,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 12,
     fontFamily: font.uiMedium,
-    fontSize: 14,
+    // 16px evita o zoom automático do Safari/iOS ao focar o campo
+    fontSize: 16,
     color: colors.text,
+  },
+  errorText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: '#ff7a7a',
+    lineHeight: 17,
+    marginBottom: 10,
   },
 });

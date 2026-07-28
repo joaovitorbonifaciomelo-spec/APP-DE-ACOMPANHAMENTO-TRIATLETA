@@ -15,7 +15,11 @@ import {
 import { colors, font, radius, spacing } from '@/theme/tokens';
 import { fmtDuration, fmtNumber, parseDecimal } from '@/utils/format';
 
-const REST_DEFAULT_SEC = 90;
+const REST_DEFAULT_SEC = 120;
+/** troca de exercício sem toque em >5h: provavelmente ficou esquecido aberto */
+const STALE_WORKOUT_SEC = 5 * 3600;
+/** peso/reps: espera essa pausa após a última tecla antes de gravar */
+const FIELD_DEBOUNCE_MS = 500;
 
 export default function ForcaScreen() {
   const { data: workout } = useLiveQuery((dbase) => getActiveWorkout(dbase));
@@ -43,11 +47,17 @@ function StartState() {
     return () => clearTimeout(t);
   }, [confirmDeleteId]);
 
+  const [startError, setStartError] = useState<string | null>(null);
+
   const start = async (templateId: number) => {
     if (starting) return;
     setStarting(true);
+    setStartError(null);
     try {
       await startWorkout(db, templateId);
+    } catch (e) {
+      setStartError('Não foi possível iniciar o treino. Verifique sua conexão e tente de novo.');
+      console.warn('[treino] falha ao iniciar:', e);
     } finally {
       setStarting(false);
     }
@@ -74,6 +84,7 @@ function StartState() {
       <Text style={styles.startHint}>
         Escolha um treino para começar. Cargas e repetições vêm pré-preenchidas com a última sessão.
       </Text>
+      {startError ? <Text style={styles.errorText}>{startError}</Text> : null}
 
       <View style={{ gap: spacing.cardGap, marginTop: 14 }}>
         {(templates ?? []).map((t) => (
@@ -118,14 +129,24 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+  const [addExerciseError, setAddExerciseError] = useState<string | null>(null);
   const elapsed = useElapsed(workout.startedAt);
 
-  // UI otimista: mudanças de série aplicam na hora e gravam em segundo plano
+  // UI otimista: mudanças de série aplicam na hora e gravam em segundo plano.
+  // Peso/reps usam debounce (grava um pouco depois de parar de digitar) com
+  // "flush": marcar a série como feita ou finalizar o treino sempre grava
+  // qualquer valor digitado na hora, mesmo sem o campo ter perdido o foco.
   const [overlay, setOverlay] = useState<Record<number, SetPatch>>({});
+  const overlayRef = React.useRef(overlay);
+  overlayRef.current = overlay;
   const pendingWrites = React.useRef<Promise<unknown>[]>([]);
+  const debounceTimers = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   useEffect(() => {
     setOverlay({});
     pendingWrites.current = [];
+    for (const t of debounceTimers.current.values()) clearTimeout(t);
+    debounceTimers.current.clear();
   }, [workout.id]);
 
   const merged: ActiveWorkout = useMemo(
@@ -172,14 +193,59 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
     return () => clearTimeout(t);
   }, [restLeft]);
 
-  const commitSet = (setId: number, patch: SetPatch) => {
-    setOverlay((prev) => ({ ...prev, [setId]: { ...prev[setId], ...patch } }));
+  const writeField = (setId: number, patch: SetPatch) => {
     pendingWrites.current.push(
       updateSet(db, setId, patch).catch((e) => console.warn('[serie] gravação falhou:', e)),
     );
   };
 
+  /** done: grava na hora (sem debounce) */
+  const commitSet = (setId: number, patch: SetPatch) => {
+    setOverlay((prev) => ({ ...prev, [setId]: { ...prev[setId], ...patch } }));
+    writeField(setId, patch);
+  };
+
+  /** peso/reps: atualiza a tela na hora, grava um pouco depois de parar de digitar */
+  const commitFieldDebounced = (setId: number, field: 'weight' | 'reps', value: number | null) => {
+    setOverlay((prev) => ({ ...prev, [setId]: { ...prev[setId], [field]: value } }));
+    const key = `${setId}:${field}`;
+    const existing = debounceTimers.current.get(key);
+    if (existing) clearTimeout(existing);
+    debounceTimers.current.set(
+      key,
+      setTimeout(() => {
+        debounceTimers.current.delete(key);
+        writeField(setId, { [field]: value } as SetPatch);
+      }, FIELD_DEBOUNCE_MS),
+    );
+  };
+
+  /** força gravar agora qualquer edição pendente de peso/reps de uma série */
+  const flushSet = (setId: number) => {
+    for (const field of ['weight', 'reps'] as const) {
+      const key = `${setId}:${field}`;
+      const timer = debounceTimers.current.get(key);
+      if (!timer) continue;
+      clearTimeout(timer);
+      debounceTimers.current.delete(key);
+      const value = overlayRef.current[setId]?.[field];
+      if (value !== undefined) writeField(setId, { [field]: value } as SetPatch);
+    }
+  };
+
+  /** força gravar tudo que ainda está pendente (usado antes de finalizar) */
+  const flushAllPending = () => {
+    for (const key of Array.from(debounceTimers.current.keys())) {
+      const [idStr, field] = key.split(':') as [string, 'weight' | 'reps'];
+      clearTimeout(debounceTimers.current.get(key)!);
+      debounceTimers.current.delete(key);
+      const value = overlayRef.current[Number(idStr)]?.[field];
+      if (value !== undefined) writeField(Number(idStr), { [field]: value } as SetPatch);
+    }
+  };
+
   const onToggleDone = (set: ActiveSet) => {
+    flushSet(set.id); // garante que o peso/reps digitado vai junto, mesmo sem tocar fora do campo
     const nowDone = !set.done;
     commitSet(set.id, { done: nowDone });
     if (nowDone) setRestLeft(REST_DEFAULT_SEC); // check dispara o descanso
@@ -188,9 +254,14 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
   const onFinish = async () => {
     if (finishing) return;
     setFinishing(true);
+    setFinishError(null);
     try {
+      flushAllPending();
       await Promise.all(pendingWrites.current); // garante que tudo chegou no banco
       await finishWorkout(db, workout.id);
+    } catch (e) {
+      setFinishError('Não foi possível salvar o treino. Verifique sua conexão e tente de novo.');
+      console.warn('[treino] falha ao finalizar:', e);
     } finally {
       setFinishing(false);
     }
@@ -220,6 +291,12 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
             </Pressable>
           </View>
         </View>
+
+        {elapsed > STALE_WORKOUT_SEC ? (
+          <Text style={styles.staleWarning}>
+            Este treino está ativo há bastante tempo — se não é a duração real, toque em "descartar" e comece de novo.
+          </Text>
+        ) : null}
 
         {active ? (
           <Card borderColor={colors.accentBorderSoft} style={{ marginTop: spacing.sectionGap }}>
@@ -253,7 +330,8 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
                   index={i}
                   isCurrent={isCurrent}
                   onToggleDone={() => onToggleDone(set)}
-                  onCommit={(patch) => commitSet(set.id, patch)}
+                  onWeightChange={(v) => commitFieldDebounced(set.id, 'weight', v)}
+                  onRepsChange={(v) => commitFieldDebounced(set.id, 'reps', v)}
                 />
               );
             })}
@@ -294,6 +372,7 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
             </Card>
           ))}
 
+          {addExerciseError ? <Text style={styles.errorText}>{addExerciseError}</Text> : null}
           <Pressable
             onPress={() => setPickerOpen(true)}
             style={({ pressed }) => [styles.addExercise, pressed && { opacity: 0.8 }]}>
@@ -303,6 +382,7 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
       </Screen>
 
       <FixedBottomBar>
+        {finishError ? <Text style={[styles.errorText, { marginBottom: 10 }]}>{finishError}</Text> : null}
         <CTAButton
           label={finishing ? 'Salvando…' : 'Finalizar treino'}
           onPress={onFinish}
@@ -316,7 +396,13 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
         excludeIds={workout.exercises.map((e) => e.exerciseId)}
         onPick={async (exerciseId) => {
           setPickerOpen(false);
-          await addExerciseToWorkout(db, workout.id, exerciseId);
+          setAddExerciseError(null);
+          try {
+            await addExerciseToWorkout(db, workout.id, exerciseId);
+          } catch (e) {
+            setAddExerciseError('Não foi possível adicionar o exercício. Tente de novo.');
+            console.warn('[treino] falha ao adicionar exercício:', e);
+          }
         }}
       />
     </View>
@@ -328,43 +414,50 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
 // ---------------------------------------------------------------------------
 
 function SetRow({
-  set, index, isCurrent, onToggleDone, onCommit,
+  set, index, isCurrent, onToggleDone, onWeightChange, onRepsChange,
 }: {
   set: ActiveSet;
   index: number;
   isCurrent: boolean;
   onToggleDone: () => void;
-  onCommit: (patch: SetPatch) => void;
+  onWeightChange: (value: number | null) => void;
+  onRepsChange: (value: number | null) => void;
 }) {
+  // texto local controlado: grava a cada tecla (com debounce no pai), não só ao perder o foco
+  const [weightText, setWeightText] = useState(set.weight != null ? fmtNumber(set.weight) : '');
+  const [repsText, setRepsText] = useState(set.reps != null ? String(set.reps) : '');
+
   return (
     <View style={styles.setRow}>
       <Mono size={13} color={colors.text2} style={{ width: 40 }}>{index + 1}</Mono>
 
       <View style={{ flex: 1.2, paddingHorizontal: 3 }}>
         <TextInput
-          defaultValue={set.weight != null ? fmtNumber(set.weight) : ''}
+          value={weightText}
+          onChangeText={(t) => {
+            setWeightText(t);
+            onWeightChange(parseDecimal(t));
+          }}
           keyboardType="decimal-pad"
           selectTextOnFocus
           placeholder="—"
           placeholderTextColor={colors.text3}
-          onEndEditing={(e) => {
-            onCommit({ weight: parseDecimal(e.nativeEvent.text) });
-          }}
           style={[styles.setInput, isCurrent && styles.setInputCurrent]}
         />
       </View>
 
       <View style={{ flex: 1, paddingHorizontal: 3 }}>
         <TextInput
-          defaultValue={set.reps != null ? String(set.reps) : ''}
+          value={repsText}
+          onChangeText={(t) => {
+            setRepsText(t);
+            const r = parseDecimal(t);
+            onRepsChange(r != null ? Math.round(r) : null);
+          }}
           keyboardType="number-pad"
           selectTextOnFocus
           placeholder="—"
           placeholderTextColor={colors.text3}
-          onEndEditing={(e) => {
-            const r = parseDecimal(e.nativeEvent.text);
-            onCommit({ reps: r != null ? Math.round(r) : null });
-          }}
           style={styles.setInput}
         />
       </View>
@@ -426,6 +519,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.text3,
   },
+  errorText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: '#ff7a7a',
+    lineHeight: 17,
+  },
+  staleWarning: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: colors.text2,
+    lineHeight: 16,
+    marginTop: spacing.sectionGap,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.input,
+    padding: 10,
+  },
   activeHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -468,7 +577,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.input,
     paddingVertical: 10,
     fontFamily: font.monoBold,
-    fontSize: 14,
+    // 16px evita o zoom automático do Safari/iOS ao focar o campo
+    fontSize: 16,
     color: colors.text,
     textAlign: 'center',
   },

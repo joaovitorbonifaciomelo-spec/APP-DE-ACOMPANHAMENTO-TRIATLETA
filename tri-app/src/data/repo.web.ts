@@ -399,6 +399,13 @@ export async function getActiveWorkout(_db: DB): Promise<ActiveWorkout | null> {
   };
 }
 
+/**
+ * Cria o treino, seus exercícios (exercise_logs) e séries (sets) em lote —
+ * no máximo 3 requisições, independente do nº de exercícios do template.
+ * Menos requisições = muito menos chance de uma falha de rede deixar o
+ * treino pela metade; se algo falhar mesmo assim, desfaz tudo (o cascade
+ * do banco apaga logs/sets já criados) em vez de deixar um treino fantasma.
+ */
 export async function startWorkout(_db: DB, templateId: number): Promise<number> {
   const g = await fetchStrengthGraph();
 
@@ -426,29 +433,39 @@ export async function startWorkout(_db: DB, templateId: number): Promise<number>
     .single();
   if (wErr) throw wErr;
 
-  for (const te of teRes.data as Row[]) {
-    const { data: log, error: lErr } = await supa()
-      .from('exercise_logs')
-      .insert({ workout_id: workout.id, exercise_id: te.exercise_id, position: te.position })
-      .select('id')
-      .single();
-    if (lErr) throw lErr;
+  try {
+    const teRows = teRes.data as Row[];
+    if (teRows.length > 0) {
+      const { data: logRows, error: lErr } = await supa()
+        .from('exercise_logs')
+        .insert(teRows.map((te) => ({ workout_id: workout.id, exercise_id: te.exercise_id, position: te.position })))
+        .select('id');
+      if (lErr) throw lErr;
 
-    const prev = previousSetsFrom(g, te.exercise_id, workout.id);
-    const nSets = Math.max(te.target_sets, 0) || prev.length || 3;
-    const rows = Array.from({ length: nSets }, (_, i) => {
-      const source = prev[i] ?? prev[prev.length - 1];
-      return {
-        log_id: log.id,
-        set_index: i,
-        weight: source?.weight ?? null,
-        reps: source?.reps ?? null,
-        done: false,
-      };
-    });
-    const { error: sErr } = await supa().from('sets').insert(rows);
-    if (sErr) throw sErr;
+      const setsRows: Row[] = [];
+      teRows.forEach((te, i) => {
+        const logId = (logRows as Row[])[i].id;
+        const prev = previousSetsFrom(g, te.exercise_id, workout.id);
+        const nSets = Math.max(te.target_sets, 0) || prev.length || 3;
+        for (let s = 0; s < nSets; s++) {
+          const source = prev[s] ?? prev[prev.length - 1];
+          setsRows.push({
+            log_id: logId, set_index: s,
+            weight: source?.weight ?? null, reps: source?.reps ?? null, done: false,
+          });
+        }
+      });
+      if (setsRows.length > 0) {
+        const { error: sErr } = await supa().from('sets').insert(setsRows);
+        if (sErr) throw sErr;
+      }
+    }
+  } catch (e) {
+    // desfaz o treino incompleto (cascade remove logs/sets já criados) e relança
+    await supa().from('strength_workouts').delete().eq('id', workout.id);
+    throw e;
   }
+
   notifyDataChanged();
   return workout.id;
 }
@@ -526,7 +543,10 @@ export async function addExerciseToWorkout(_db: DB, workoutId: number, exerciseI
     };
   });
   const { error: sErr } = await supa().from('sets').insert(rows);
-  if (sErr) throw sErr;
+  if (sErr) {
+    await supa().from('exercise_logs').delete().eq('id', log.id);
+    throw sErr;
+  }
   notifyDataChanged();
 }
 
