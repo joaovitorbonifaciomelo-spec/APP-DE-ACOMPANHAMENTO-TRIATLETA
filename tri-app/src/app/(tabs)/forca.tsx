@@ -75,7 +75,11 @@ function StartState() {
 
       <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
         {(templates ?? []).map((t) => (
-          <DeletableCard key={t.id} onPress={() => start(t.id)} onDelete={() => deleteTemplate(db, t.id)}>
+          <DeletableCard
+            key={t.id}
+            onPress={() => start(t.id)}
+            onDelete={() => deleteTemplate(db, t.id)}
+            itemLabel={`o treino "${t.name}"`}>
             <View style={styles.queueRow}>
               <View style={{ flex: 1, flexShrink: 1 }}>
                 <Text style={styles.exerciseName15}>{t.name}</Text>
@@ -100,7 +104,10 @@ function StartState() {
           <Text style={styles.sectionTitle}>Histórico</Text>
           <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
             {recentWorkouts.map((w) => (
-              <DeletableCard key={w.id} onDelete={() => cancelWorkout(db, w.id)}>
+              <DeletableCard
+                key={w.id}
+                onDelete={() => cancelWorkout(db, w.id)}
+                itemLabel={`o treino de ${fmtDayMonth(w.date)}`}>
                 <View style={styles.queueRow}>
                   <View style={{ flexShrink: 1 }}>
                     <Text style={styles.exerciseName15}>{w.name}</Text>

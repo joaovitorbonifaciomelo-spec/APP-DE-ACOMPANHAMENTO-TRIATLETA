@@ -67,7 +67,10 @@ export default function CardioScreen() {
               const isBest = pace != null && bestBySport.get(sport) === pace.raw && m.items.length > 0;
               const d = fromISODate(a.date);
               return (
-                <DeletableCard key={a.id} onDelete={() => deleteCardio(db, a.id)}>
+                <DeletableCard
+                  key={a.id}
+                  onDelete={() => deleteCardio(db, a.id)}
+                  itemLabel={`este registro de ${SPORT_LABEL[sport]}`}>
                   <View style={styles.itemRow}>
                     <View style={styles.dateBlock}>
                       <Mono size={16}>{String(d.getDate()).padStart(2, '0')}</Mono>
