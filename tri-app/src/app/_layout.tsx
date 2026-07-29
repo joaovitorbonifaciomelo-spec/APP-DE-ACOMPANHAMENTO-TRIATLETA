@@ -66,6 +66,7 @@ export default function RootLayout() {
               <Stack.Screen name="cardio-new" options={{ presentation: 'modal' }} />
               <Stack.Screen name="race-new" options={{ presentation: 'modal' }} />
               <Stack.Screen name="template-new" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="workout-start" options={{ presentation: 'modal' }} />
             </Stack>
           </SyncManager>
         </AuthGate>

@@ -23,7 +23,7 @@ export default function QuickAddScreen() {
             subtitle="iniciar a partir de um template"
             onPress={() => {
               router.back();
-              router.navigate('/forca');
+              router.push('/workout-start');
             }}
           />
           <Option

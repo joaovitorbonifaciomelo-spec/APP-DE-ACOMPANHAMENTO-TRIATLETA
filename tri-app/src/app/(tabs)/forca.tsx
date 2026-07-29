@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -9,8 +8,8 @@ import { Card, CTAButton, Mono, SectionLabel } from '@/components/ui';
 import { useDb } from '@/data/db-context';
 import { useLiveQuery } from '@/data/hooks';
 import {
-  addExerciseToWorkout, addSetToLog, cancelWorkout, deleteTemplate, finishWorkout,
-  getActiveWorkout, listRecentWorkouts, listTemplates, startWorkout, updateSet,
+  addExerciseToWorkout, addSetToLog, cancelWorkout, finishWorkout,
+  getActiveWorkout, listRecentWorkouts, updateSet,
   type ActiveExercise, type ActiveSet, type ActiveWorkout,
 } from '@/data/repo';
 import { colors, font, radius, spacing } from '@/theme/tokens';
@@ -26,82 +25,25 @@ export default function ForcaScreen() {
   const { data: workout } = useLiveQuery((dbase) => getActiveWorkout(dbase));
 
   if (workout === undefined) return <Screen>{null}</Screen>;
-  if (workout === null) return <StartState />;
+  if (workout === null) return <HistoryState />;
   return <ActiveWorkoutView workout={workout} />;
 }
 
 // ---------------------------------------------------------------------------
-// Estado inicial: escolher template e iniciar treino
+// Sem treino em andamento: só o histórico (iniciar treino é pelo botão + central)
 // ---------------------------------------------------------------------------
 
-function StartState() {
+function HistoryState() {
   const db = useDb();
-  const router = useRouter();
-  const { data: templates } = useLiveQuery((dbase) => listTemplates(dbase));
-  const { data: recentWorkouts } = useLiveQuery((dbase) => listRecentWorkouts(dbase, 5));
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
-
-  const start = async (templateId: number) => {
-    if (starting) return;
-    setStarting(true);
-    setStartError(null);
-    try {
-      await startWorkout(db, templateId);
-    } catch (e) {
-      setStartError('Não foi possível iniciar o treino. Verifique sua conexão e tente de novo.');
-      console.warn('[treino] falha ao iniciar:', e);
-    } finally {
-      setStarting(false);
-    }
-  };
+  const { data: recentWorkouts } = useLiveQuery((dbase) => listRecentWorkouts(dbase, 30));
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <View>
-          <SectionLabel>Treino de força</SectionLabel>
-          <Text style={styles.title}>Iniciar treino</Text>
-        </View>
-      </View>
-
-      <Text style={styles.startHint}>
-        Escolha um treino para começar. A coluna "Anterior" mostra o que você fez na última sessão,
-        como referência.
-      </Text>
-      {startError ? <Text style={styles.errorText}>{startError}</Text> : null}
-
-      <Text style={styles.holdHint}>Pressione e segure um treino para apagar.</Text>
-
-      <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
-        {(templates ?? []).map((t) => (
-          <DeletableCard
-            key={t.id}
-            onPress={() => start(t.id)}
-            onDelete={() => deleteTemplate(db, t.id)}
-            itemLabel={`o treino "${t.name}"`}>
-            <View style={styles.queueRow}>
-              <View style={{ flex: 1, flexShrink: 1 }}>
-                <Text style={styles.exerciseName15}>{t.name}</Text>
-                <Text style={styles.cardMeta} numberOfLines={1}>
-                  {t.exerciseNames.join(' · ')}
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </View>
-          </DeletableCard>
-        ))}
-
-        <Pressable
-          onPress={() => router.push('/template-new')}
-          style={({ pressed }) => [styles.addExercise, pressed && { opacity: 0.8 }]}>
-          <Text style={styles.addExerciseText}>+ criar treino</Text>
-        </Pressable>
-      </View>
+      <Text style={styles.screenTitle}>Força</Text>
 
       {recentWorkouts && recentWorkouts.length > 0 ? (
-        <View style={{ marginTop: spacing.sectionGap }}>
-          <Text style={styles.sectionTitle}>Histórico</Text>
+        <>
+          <Text style={styles.holdHint}>Pressione e segure um treino para apagar.</Text>
           <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
             {recentWorkouts.map((w) => (
               <DeletableCard
@@ -120,8 +62,12 @@ function StartState() {
               </DeletableCard>
             ))}
           </View>
-        </View>
-      ) : null}
+        </>
+      ) : (
+        <Text style={styles.startHint}>
+          Nenhum treino registrado ainda. Toque no botão + para iniciar um treino de força.
+        </Text>
+      )}
     </Screen>
   );
 }
@@ -516,6 +462,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.44,
     color: colors.text,
     marginTop: 3,
+  },
+  screenTitle: {
+    fontFamily: font.uiBold,
+    fontSize: 24,
+    letterSpacing: -0.48,
+    color: colors.text,
+    marginTop: 6,
   },
   startHint: {
     fontFamily: font.ui,
