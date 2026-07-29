@@ -1,15 +1,17 @@
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { BarChart } from '@/components/bar-chart';
 import { DeletableCard } from '@/components/deletable-card';
 import { ExercisePicker } from '@/components/exercise-picker';
 import { FixedBottomBar, Screen } from '@/components/screen';
-import { Card, CTAButton, Mono, SectionLabel } from '@/components/ui';
+import { Card, CTAButton, DeltaTag, Mono, SectionLabel, SectionTitle } from '@/components/ui';
 import { useDb } from '@/data/db-context';
 import { useLiveQuery } from '@/data/hooks';
 import {
   addExerciseToWorkout, addSetToLog, cancelWorkout, finishWorkout,
-  getActiveWorkout, listRecentWorkouts, updateSet,
+  getActiveWorkout, getExerciseProgress, listRecentWorkouts, updateSet,
   type ActiveExercise, type ActiveSet, type ActiveWorkout,
 } from '@/data/repo';
 import { colors, font, radius, spacing } from '@/theme/tokens';
@@ -35,14 +37,52 @@ export default function ForcaScreen() {
 
 function HistoryState() {
   const db = useDb();
+  const router = useRouter();
+  const { data: progress } = useLiveQuery((dbase) => getExerciseProgress(dbase, 3));
   const { data: recentWorkouts } = useLiveQuery((dbase) => listRecentWorkouts(dbase, 30));
 
   return (
     <Screen>
       <Text style={styles.screenTitle}>Força</Text>
 
+      {progress && progress.length > 0 ? (
+        <View style={{ marginTop: spacing.sectionGap }}>
+          <SectionTitle link="ver tudo" onLinkPress={() => router.push('/exercise')}>
+            Evolução de carga
+          </SectionTitle>
+          <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
+            {progress.map((p, idx) => (
+              <Card key={p.exerciseId} onPress={() => router.push(`/exercise/${p.exerciseId}`)}>
+                <View style={styles.progressRow}>
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={styles.exerciseName15}>{p.name}</Text>
+                    <Text style={styles.cardMeta}>último: {p.lastScheme}</Text>
+                  </View>
+                  <View style={styles.progressValue}>
+                    <Mono size={18}>{fmtNumber(p.currentMax)} kg</Mono>
+                    {p.delta != null ? <DeltaTag delta={p.delta} /> : null}
+                  </View>
+                </View>
+                {idx === 0 && p.spark.length > 1 ? (
+                  <View style={{ marginTop: 12 }}>
+                    <BarChart
+                      height={26}
+                      gap={4}
+                      barRadius={2}
+                      minRatio={0.5}
+                      bars={p.spark.map((v, i) => ({ value: v, highlight: i === p.spark.length - 1 }))}
+                    />
+                  </View>
+                ) : null}
+              </Card>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {recentWorkouts && recentWorkouts.length > 0 ? (
-        <>
+        <View style={{ marginTop: spacing.sectionGap }}>
+          <SectionTitle>Histórico</SectionTitle>
           <Text style={styles.holdHint}>Pressione e segure um treino para apagar.</Text>
           <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
             {recentWorkouts.map((w) => (
@@ -62,12 +102,12 @@ function HistoryState() {
               </DeletableCard>
             ))}
           </View>
-        </>
-      ) : (
+        </View>
+      ) : progress && progress.length === 0 ? (
         <Text style={styles.startHint}>
           Nenhum treino registrado ainda. Toque no botão + para iniciar um treino de força.
         </Text>
-      )}
+      ) : null}
     </Screen>
   );
 }
@@ -483,10 +523,16 @@ const styles = StyleSheet.create({
     color: colors.text3,
     marginTop: 14,
   },
-  sectionTitle: {
-    fontFamily: font.uiSemiBold,
-    fontSize: 15,
-    color: colors.text,
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  progressValue: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 7,
   },
   timerChip: {
     backgroundColor: colors.surface2,

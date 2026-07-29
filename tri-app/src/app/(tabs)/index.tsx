@@ -5,9 +5,9 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { BarChart } from '@/components/bar-chart';
 import { Screen } from '@/components/screen';
-import { Card, DeltaTag, Mono, SectionLabel, SectionTitle } from '@/components/ui';
+import { Card, Mono, SectionLabel, SectionTitle } from '@/components/ui';
 import { useLiveQuery } from '@/data/hooks';
-import { getExerciseProgress, getRecentActivity, getWeekSummary } from '@/data/repo';
+import { getRecentActivity, getWeekSummary } from '@/data/repo';
 import { SPORT_TAG, type Sport } from '@/db/types';
 import { colors, font, spacing } from '@/theme/tokens';
 import {
@@ -17,7 +17,6 @@ import {
 export default function Dashboard() {
   const router = useRouter();
   const { data: week } = useLiveQuery((db) => getWeekSummary(db));
-  const { data: progress } = useLiveQuery((db) => getExerciseProgress(db, 3));
   const { data: recent } = useLiveQuery((db) => getRecentActivity(db, 3));
 
   const now = new Date();
@@ -68,40 +67,6 @@ export default function Dashboard() {
           />
         </View>
       </Card>
-
-      {/* Evolução de carga */}
-      <View style={{ marginTop: spacing.sectionGap }}>
-        <SectionTitle link="ver tudo" onLinkPress={() => router.push('/exercise')}>
-          Evolução de carga
-        </SectionTitle>
-        <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
-          {(progress ?? []).map((p, idx) => (
-            <Card key={p.exerciseId} onPress={() => router.push(`/exercise/${p.exerciseId}`)}>
-              <View style={styles.progressRow}>
-                <View style={{ flexShrink: 1 }}>
-                  <Text style={styles.exerciseName}>{p.name}</Text>
-                  <Text style={styles.exerciseMeta}>último: {p.lastScheme}</Text>
-                </View>
-                <View style={styles.progressValue}>
-                  <Mono size={18}>{fmtNumber(p.currentMax)} kg</Mono>
-                  {p.delta != null ? <DeltaTag delta={p.delta} /> : null}
-                </View>
-              </View>
-              {idx === 0 && p.spark.length > 1 ? (
-                <View style={{ marginTop: 12 }}>
-                  <BarChart
-                    height={26}
-                    gap={4}
-                    barRadius={2}
-                    minRatio={0.5}
-                    bars={p.spark.map((v, i) => ({ value: v, highlight: i === p.spark.length - 1 }))}
-                  />
-                </View>
-              ) : null}
-            </Card>
-          ))}
-        </View>
-      </View>
 
       {/* Últimos treinos (cardio + força) */}
       <View style={{ marginTop: spacing.sectionGap }}>
@@ -219,17 +184,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.text2,
     marginTop: 3,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  progressValue: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 7,
   },
   exerciseName: {
     fontFamily: font.uiSemiBold,
