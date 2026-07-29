@@ -8,17 +8,21 @@ import { colors, font, radius, spacing } from '@/theme/tokens';
 // ---------------------------------------------------------------------------
 
 export function Card({
-  children, style, onPress, borderColor,
+  children, style, onPress, onLongPress, borderColor,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
+  onLongPress?: () => void;
   borderColor?: string;
 }) {
   const base = [styles.card, borderColor ? { borderColor } : null, style];
-  if (onPress) {
+  if (onPress || onLongPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [...base, pressed && { opacity: 0.82 }]}>
+      <Pressable
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={({ pressed }) => [...base, pressed && { opacity: 0.82 }]}>
         {children}
       </Pressable>
     );

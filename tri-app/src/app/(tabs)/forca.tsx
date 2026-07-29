@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { DeletableCard } from '@/components/deletable-card';
 import { ExercisePicker } from '@/components/exercise-picker';
 import { FixedBottomBar, Screen } from '@/components/screen';
 import { Card, CTAButton, Mono, SectionLabel } from '@/components/ui';
@@ -39,15 +40,6 @@ function StartState() {
   const { data: templates } = useLiveQuery((dbase) => listTemplates(dbase));
   const { data: recentWorkouts } = useLiveQuery((dbase) => listRecentWorkouts(dbase, 5));
   const [starting, setStarting] = useState(false);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
-
-  // confirmação de apagar volta ao normal após 3s
-  useEffect(() => {
-    if (confirmDeleteId == null) return;
-    const t = setTimeout(() => setConfirmDeleteId(null), 3000);
-    return () => clearTimeout(t);
-  }, [confirmDeleteId]);
-
   const [startError, setStartError] = useState<string | null>(null);
 
   const start = async (templateId: number) => {
@@ -64,15 +56,6 @@ function StartState() {
     }
   };
 
-  const onDeletePress = (templateId: number) => {
-    if (confirmDeleteId === templateId) {
-      setConfirmDeleteId(null);
-      deleteTemplate(db, templateId);
-    } else {
-      setConfirmDeleteId(templateId);
-    }
-  };
-
   return (
     <Screen>
       <View style={styles.header}>
@@ -83,13 +66,16 @@ function StartState() {
       </View>
 
       <Text style={styles.startHint}>
-        Escolha um treino para começar. Cargas e repetições vêm pré-preenchidas com a última sessão.
+        Escolha um treino para começar. A coluna "Anterior" mostra o que você fez na última sessão,
+        como referência.
       </Text>
       {startError ? <Text style={styles.errorText}>{startError}</Text> : null}
 
-      <View style={{ gap: spacing.cardGap, marginTop: 14 }}>
+      <Text style={styles.holdHint}>Pressione e segure um treino para apagar.</Text>
+
+      <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
         {(templates ?? []).map((t) => (
-          <Card key={t.id} onPress={() => start(t.id)}>
+          <DeletableCard key={t.id} onPress={() => start(t.id)} onDelete={() => deleteTemplate(db, t.id)}>
             <View style={styles.queueRow}>
               <View style={{ flex: 1, flexShrink: 1 }}>
                 <Text style={styles.exerciseName15}>{t.name}</Text>
@@ -97,14 +83,9 @@ function StartState() {
                   {t.exerciseNames.join(' · ')}
                 </Text>
               </View>
-              <Pressable onPress={() => onDeletePress(t.id)} hitSlop={8} style={styles.deleteBtn}>
-                <Text style={[styles.deleteText, confirmDeleteId === t.id && { color: '#ff7a7a' }]}>
-                  {confirmDeleteId === t.id ? 'apagar?' : '×'}
-                </Text>
-              </Pressable>
               <Text style={styles.chevron}>›</Text>
             </View>
-          </Card>
+          </DeletableCard>
         ))}
 
         <Pressable
@@ -119,7 +100,7 @@ function StartState() {
           <Text style={styles.sectionTitle}>Histórico</Text>
           <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
             {recentWorkouts.map((w) => (
-              <Card key={w.id}>
+              <DeletableCard key={w.id} onDelete={() => cancelWorkout(db, w.id)}>
                 <View style={styles.queueRow}>
                   <View style={{ flexShrink: 1 }}>
                     <Text style={styles.exerciseName15}>{w.name}</Text>
@@ -129,7 +110,7 @@ function StartState() {
                     </Text>
                   </View>
                 </View>
-              </Card>
+              </DeletableCard>
             ))}
           </View>
         </View>
@@ -500,13 +481,19 @@ function SetRow({
   );
 }
 
-function useElapsed(startedAt: number): number {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
+function computeElapsed(startedAt: number): number {
   return Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+}
+
+/** segundos decorridos desde startedAt, recalculado a cada 1s (valor em estado, não só um contador de re-render) */
+function useElapsed(startedAt: number): number {
+  const [elapsed, setElapsed] = useState(() => computeElapsed(startedAt));
+  useEffect(() => {
+    setElapsed(computeElapsed(startedAt));
+    const t = setInterval(() => setElapsed(computeElapsed(startedAt)), 1000);
+    return () => clearInterval(t);
+  }, [startedAt]);
+  return elapsed;
 }
 
 const styles = StyleSheet.create({
@@ -529,6 +516,12 @@ const styles = StyleSheet.create({
     color: colors.text2,
     marginTop: 14,
     lineHeight: 18,
+  },
+  holdHint: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: colors.text3,
+    marginTop: 14,
   },
   sectionTitle: {
     fontFamily: font.uiSemiBold,
@@ -682,21 +675,6 @@ const styles = StyleSheet.create({
   chevron: {
     fontFamily: font.ui,
     fontSize: 16,
-    color: colors.text3,
-  },
-  deleteBtn: {
-    minWidth: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-    marginRight: 4,
-  },
-  deleteText: {
-    fontFamily: font.uiMedium,
-    fontSize: 13,
     color: colors.text3,
   },
   addExercise: {

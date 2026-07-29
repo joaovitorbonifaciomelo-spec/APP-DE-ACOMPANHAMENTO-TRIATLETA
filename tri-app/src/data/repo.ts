@@ -151,6 +151,39 @@ export async function getRecentCardio(db: SQLiteDatabase, limit = 3): Promise<Ca
   );
 }
 
+export interface RecentActivityItem {
+  kind: 'cardio' | 'strength';
+  id: number;
+  date: string;
+  title: string;
+  durationSec: number | null;
+  // cardio
+  sport?: Sport;
+  distanceM?: number;
+  // força
+  exerciseCount?: number;
+}
+
+/** últimas atividades de qualquer tipo (cardio + força), mais recentes primeiro */
+export async function getRecentActivity(db: SQLiteDatabase, limit = 3): Promise<RecentActivityItem[]> {
+  const [cardio, strength] = await Promise.all([
+    getRecentCardio(db, limit),
+    listRecentWorkouts(db, limit),
+  ]);
+  const items: RecentActivityItem[] = [
+    ...cardio.map((c): RecentActivityItem => ({
+      kind: 'cardio', id: c.id, date: c.date, title: c.title, durationSec: c.duration_sec,
+      sport: c.sport as Sport, distanceM: c.distance_m,
+    })),
+    ...strength.map((w): RecentActivityItem => ({
+      kind: 'strength', id: w.id, date: w.date, title: w.name, durationSec: w.durationSec,
+      exerciseCount: w.exerciseCount,
+    })),
+  ];
+  items.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  return items.slice(0, limit);
+}
+
 // ---------------------------------------------------------------------------
 // Cardio
 // ---------------------------------------------------------------------------
@@ -174,6 +207,12 @@ export async function addCardio(
     'INSERT INTO cardio_activities (sport, title, date, distance_m, duration_sec, notes) VALUES (?, ?, ?, ?, ?, ?)',
     a.sport, a.title, a.date, a.distance_m, a.duration_sec, a.notes,
   );
+  notifyDataChanged();
+}
+
+export async function deleteCardio(db: SQLiteDatabase, id: number): Promise<void> {
+  await tombstoneWhere(db, 'cardio_activities', 'id = ?', id);
+  await db.runAsync('DELETE FROM cardio_activities WHERE id = ?', id);
   notifyDataChanged();
 }
 

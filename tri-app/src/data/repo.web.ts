@@ -198,6 +198,43 @@ export async function addCardio(
   notifyDataChanged();
 }
 
+export async function deleteCardio(_db: DB, id: number): Promise<void> {
+  const { error } = await supa().from('cardio_activities').delete().eq('id', id);
+  if (error) throw error;
+  notifyDataChanged();
+}
+
+export interface RecentActivityItem {
+  kind: 'cardio' | 'strength';
+  id: number;
+  date: string;
+  title: string;
+  durationSec: number | null;
+  sport?: Sport;
+  distanceM?: number;
+  exerciseCount?: number;
+}
+
+/** últimas atividades de qualquer tipo (cardio + força), mais recentes primeiro */
+export async function getRecentActivity(_db: DB, limit = 3): Promise<RecentActivityItem[]> {
+  const [cardio, strength] = await Promise.all([
+    getRecentCardio(_db, limit),
+    listRecentWorkouts(_db, limit),
+  ]);
+  const items: RecentActivityItem[] = [
+    ...cardio.map((c): RecentActivityItem => ({
+      kind: 'cardio', id: c.id, date: c.date, title: c.title, durationSec: c.duration_sec,
+      sport: c.sport as Sport, distanceM: c.distance_m,
+    })),
+    ...strength.map((w): RecentActivityItem => ({
+      kind: 'strength', id: w.id, date: w.date, title: w.name, durationSec: w.durationSec,
+      exerciseCount: w.exerciseCount,
+    })),
+  ];
+  items.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  return items.slice(0, limit);
+}
+
 // ---------------------------------------------------------------------------
 // Evolução de carga
 // ---------------------------------------------------------------------------

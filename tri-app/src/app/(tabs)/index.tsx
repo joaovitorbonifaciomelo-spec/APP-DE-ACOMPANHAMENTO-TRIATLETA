@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { Dumbbell } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -6,7 +7,7 @@ import { BarChart } from '@/components/bar-chart';
 import { Screen } from '@/components/screen';
 import { Card, DeltaTag, Mono, SectionLabel, SectionTitle } from '@/components/ui';
 import { useLiveQuery } from '@/data/hooks';
-import { getExerciseProgress, getRecentCardio, getWeekSummary } from '@/data/repo';
+import { getExerciseProgress, getRecentActivity, getWeekSummary } from '@/data/repo';
 import { SPORT_TAG, type Sport } from '@/db/types';
 import { colors, font, spacing } from '@/theme/tokens';
 import {
@@ -17,7 +18,7 @@ export default function Dashboard() {
   const router = useRouter();
   const { data: week } = useLiveQuery((db) => getWeekSummary(db));
   const { data: progress } = useLiveQuery((db) => getExerciseProgress(db, 3));
-  const { data: recent } = useLiveQuery((db) => getRecentCardio(db, 3));
+  const { data: recent } = useLiveQuery((db) => getRecentActivity(db, 3));
 
   const now = new Date();
   const weekLabel = `Semana ${isoWeek(now)} · ${MONTHS_SHORT[now.getMonth()]} ${now.getFullYear()}`;
@@ -102,30 +103,50 @@ export default function Dashboard() {
         </View>
       </View>
 
-      {/* Últimos treinos */}
+      {/* Últimos treinos (cardio + força) */}
       <View style={{ marginTop: spacing.sectionGap }}>
         <SectionTitle>Últimos treinos</SectionTitle>
         <View style={{ gap: spacing.cardGap, marginTop: 10 }}>
           {(recent ?? []).map((a) => {
-            const pace = paceFor(a.sport as Sport, a.distance_m, a.duration_sec);
+            if (a.kind === 'cardio') {
+              const sport = a.sport as Sport;
+              const pace = paceFor(sport, a.distanceM ?? 0, a.durationSec ?? 0);
+              return (
+                <Card key={`c${a.id}`} onPress={() => router.navigate('/cardio')}>
+                  <View style={styles.activityRow}>
+                    <View style={styles.activityIcon}>
+                      <Mono size={10} color={colors.accent}>{SPORT_TAG[sport]}</Mono>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.exerciseName}>{a.title}</Text>
+                      <Text style={styles.exerciseMeta}>
+                        {relativeDayLabel(a.date)} · {fmtDistance(sport, a.distanceM ?? 0)}
+                        {a.durationSec ? ` · ${fmtDuration(a.durationSec)}` : ''}
+                      </Text>
+                    </View>
+                    {pace ? (
+                      <Text>
+                        <Mono size={13}>{pace.value}</Mono>
+                        <Mono size={11} color={colors.text2} bold={false}>{pace.unit === 'km/h' ? ` ${pace.unit}` : pace.unit}</Mono>
+                      </Text>
+                    ) : null}
+                  </View>
+                </Card>
+              );
+            }
             return (
-              <Card key={a.id} onPress={() => router.navigate('/cardio')}>
+              <Card key={`s${a.id}`} onPress={() => router.navigate('/forca')}>
                 <View style={styles.activityRow}>
                   <View style={styles.activityIcon}>
-                    <Mono size={10} color={colors.accent}>{SPORT_TAG[a.sport as Sport]}</Mono>
+                    <Dumbbell size={16} color={colors.accent} strokeWidth={2.2} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.exerciseName}>{a.title}</Text>
                     <Text style={styles.exerciseMeta}>
-                      {relativeDayLabel(a.date)} · {fmtDistance(a.sport as Sport, a.distance_m)} · {fmtDuration(a.duration_sec)}
+                      {relativeDayLabel(a.date)} · {a.exerciseCount} {a.exerciseCount === 1 ? 'exercício' : 'exercícios'}
                     </Text>
                   </View>
-                  {pace ? (
-                    <Text>
-                      <Mono size={13}>{pace.value}</Mono>
-                      <Mono size={11} color={colors.text2} bold={false}>{pace.unit === 'km/h' ? ` ${pace.unit}` : pace.unit}</Mono>
-                    </Text>
-                  ) : null}
+                  {a.durationSec ? <Mono size={13}>{fmtDuration(a.durationSec)}</Mono> : null}
                 </View>
               </Card>
             );

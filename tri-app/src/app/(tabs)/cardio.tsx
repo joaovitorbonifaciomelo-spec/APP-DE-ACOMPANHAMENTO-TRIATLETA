@@ -2,10 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { BarChart } from '@/components/bar-chart';
+import { DeletableCard } from '@/components/deletable-card';
 import { Screen } from '@/components/screen';
 import { Card, Chip, Mono, SectionLabel } from '@/components/ui';
+import { useDb } from '@/data/db-context';
 import { useLiveQuery } from '@/data/hooks';
-import { listCardio, type SportFilter } from '@/data/repo';
+import { deleteCardio, listCardio, type SportFilter } from '@/data/repo';
 import { SPORT_LABEL, type CardioActivity, type Sport } from '@/db/types';
 import { colors, font, spacing } from '@/theme/tokens';
 import {
@@ -21,8 +23,9 @@ const FILTERS: { key: SportFilter; label: string }[] = [
 ];
 
 export default function CardioScreen() {
+  const db = useDb();
   const [filter, setFilter] = useState<SportFilter>('run');
-  const { data: activities } = useLiveQuery((db) => listCardio(db, filter), [filter]);
+  const { data: activities } = useLiveQuery((dbase) => listCardio(dbase, filter), [filter]);
 
   const list = activities ?? [];
 
@@ -52,6 +55,8 @@ export default function CardioScreen() {
 
       {filter !== 'all' ? <TrendCard sport={filter} activities={list} /> : null}
 
+      {list.length > 0 ? <Text style={styles.holdHint}>Pressione e segure um treino para apagar.</Text> : null}
+
       {months.map((m) => (
         <View key={m.key} style={{ marginTop: spacing.sectionGap }}>
           <Text style={styles.monthTitle}>{m.label}</Text>
@@ -62,7 +67,7 @@ export default function CardioScreen() {
               const isBest = pace != null && bestBySport.get(sport) === pace.raw && m.items.length > 0;
               const d = fromISODate(a.date);
               return (
-                <Card key={a.id}>
+                <DeletableCard key={a.id} onDelete={() => deleteCardio(db, a.id)}>
                   <View style={styles.itemRow}>
                     <View style={styles.dateBlock}>
                       <Mono size={16}>{String(d.getDate()).padStart(2, '0')}</Mono>
@@ -83,7 +88,7 @@ export default function CardioScreen() {
                       </Text>
                     ) : null}
                   </View>
-                </Card>
+                </DeletableCard>
               );
             })}
           </View>
@@ -189,6 +194,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 14,
+  },
+  holdHint: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: colors.text3,
+    marginTop: spacing.sectionGap,
   },
   trendHeader: {
     flexDirection: 'row',
