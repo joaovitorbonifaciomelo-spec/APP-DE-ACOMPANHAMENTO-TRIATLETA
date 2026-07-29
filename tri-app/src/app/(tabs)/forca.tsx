@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { TrendingUp } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -120,6 +121,7 @@ type SetPatch = { weight?: number | null; reps?: number | null; done?: boolean }
 
 function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
   const db = useDb();
+  const router = useRouter();
   const [activeLogId, setActiveLogId] = useState<number | null>(null);
   const [restLeft, setRestLeft] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -302,6 +304,13 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
                 {active.previousSummary ? (
                   <Text style={styles.cardMeta}>anterior: {active.previousSummary}</Text>
                 ) : null}
+                <Pressable
+                  onPress={() => router.push(`/exercise/${active.exerciseId}`)}
+                  hitSlop={6}
+                  style={({ pressed }) => [styles.evolutionLink, pressed && { opacity: 0.7 }]}>
+                  <TrendingUp size={12} color={colors.accent} strokeWidth={2.4} />
+                  <Text style={styles.evolutionLinkText}>ver evolução de carga · PRs</Text>
+                </Pressable>
               </View>
               <View style={styles.statusBadge}>
                 <Text style={styles.statusBadgeText}>EM ANDAMENTO</Text>
@@ -359,11 +368,19 @@ function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
                     {e.previousMax != null ? ` · anterior ${fmtNumber(e.previousMax)} kg` : ''}
                   </Text>
                 </View>
-                {e.logId === nextLogId ? (
-                  <Text style={styles.nextLabel}>a seguir ›</Text>
-                ) : (
-                  <Text style={styles.chevron}>›</Text>
-                )}
+                <View style={styles.queueRight}>
+                  <Pressable
+                    onPress={() => router.push(`/exercise/${e.exerciseId}`)}
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.queueEvolutionBtn, pressed && { opacity: 0.7 }]}>
+                    <TrendingUp size={14} color={colors.text2} strokeWidth={2.2} />
+                  </Pressable>
+                  {e.logId === nextLogId ? (
+                    <Text style={styles.nextLabel}>a seguir ›</Text>
+                  ) : (
+                    <Text style={styles.chevron}>›</Text>
+                  )}
+                </View>
               </View>
             </Card>
           ))}
@@ -567,6 +584,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
+  evolutionLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 7,
+  },
+  evolutionLinkText: {
+    fontFamily: font.uiMedium,
+    fontSize: 11,
+    color: colors.accent,
+  },
   statusBadge: {
     backgroundColor: colors.accent,
     borderRadius: radius.pill,
@@ -661,6 +689,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
+  },
+  queueRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  queueEvolutionBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: colors.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   exerciseName15: {
     fontFamily: font.uiSemiBold,
