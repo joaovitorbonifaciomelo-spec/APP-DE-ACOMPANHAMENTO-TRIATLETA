@@ -164,24 +164,45 @@ export interface RecentActivityItem {
   exerciseCount?: number;
 }
 
+/**
+ * Mescla duas listas já ordenadas (mais recente primeiro) por `date`. Em
+ * empate de data, alterna entre as duas em vez de decidir por `id` — os ids
+ * vêm de tabelas diferentes, com sequências independentes, então comparar
+ * ids entre elas não indica qual aconteceu depois (uma tabela com muito mais
+ * linhas historicamente sempre "venceria" o empate, mesmo sem ser mais recente).
+ */
+function mergeByDate<A extends { date: string }, B extends { date: string }>(
+  a: A[], b: B[], limit: number,
+): (A | B)[] {
+  const result: (A | B)[] = [];
+  let i = 0; let j = 0; let favorA = true;
+  while (result.length < limit && (i < a.length || j < b.length)) {
+    const x = a[i]; const y = b[j];
+    let takeA: boolean;
+    if (!x) takeA = false;
+    else if (!y) takeA = true;
+    else if (x.date !== y.date) takeA = x.date > y.date;
+    else { takeA = favorA; favorA = !favorA; }
+    if (takeA) { result.push(x); i++; } else { result.push(y); j++; }
+  }
+  return result;
+}
+
 /** últimas atividades de qualquer tipo (cardio + força), mais recentes primeiro */
 export async function getRecentActivity(db: SQLiteDatabase, limit = 3): Promise<RecentActivityItem[]> {
   const [cardio, strength] = await Promise.all([
     getRecentCardio(db, limit),
     listRecentWorkouts(db, limit),
   ]);
-  const items: RecentActivityItem[] = [
-    ...cardio.map((c): RecentActivityItem => ({
-      kind: 'cardio', id: c.id, date: c.date, title: c.title, durationSec: c.duration_sec,
-      sport: c.sport as Sport, distanceM: c.distance_m,
-    })),
-    ...strength.map((w): RecentActivityItem => ({
-      kind: 'strength', id: w.id, date: w.date, title: w.name, durationSec: w.durationSec,
-      exerciseCount: w.exerciseCount,
-    })),
-  ];
-  items.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
-  return items.slice(0, limit);
+  const cardioItems = cardio.map((c): RecentActivityItem => ({
+    kind: 'cardio', id: c.id, date: c.date, title: c.title, durationSec: c.duration_sec,
+    sport: c.sport as Sport, distanceM: c.distance_m,
+  }));
+  const strengthItems = strength.map((w): RecentActivityItem => ({
+    kind: 'strength', id: w.id, date: w.date, title: w.name, durationSec: w.durationSec,
+    exerciseCount: w.exerciseCount,
+  }));
+  return mergeByDate(cardioItems, strengthItems, limit);
 }
 
 // ---------------------------------------------------------------------------
